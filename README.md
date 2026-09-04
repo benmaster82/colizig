@@ -162,14 +162,19 @@ zig build run -- chat     test/fixtures/tiny --prompt "hello world" --steps 12
 
 ### Get a real checkpoint
 
-Either model family works. The smaller one (Qwen3-30B-A3B, ~30 GB) is the
-faster way to try the engine for real:
+Both need the `hf` CLI (`pip install -U "huggingface_hub[cli]"`). Either model
+family works with the engine; which to grab depends on what you're after:
 
 ```sh
+# Qwen3-30B-A3B (~30 GB) - the fast way to try the engine for real:
 hf download Qwen/Qwen3-30B-A3B-FP8 --local-dir C:\Models\Qwen3-30B-A3B-FP8
+
+# Qwen3.8-Flash-Next (~173 GiB) - the full 176B/512-expert checkpoint colizig
+# was originally built for. Needs that much free disk space and a few hours:
+hf download Qwen/Qwen3.8-Flash-Next-FP8 --local-dir C:\Models\Qwen3.8-Flash-Next-FP8
 ```
 
-> If the download hangs at 0 B/s behind a corporate proxy, it's almost always
+> If a download hangs at 0 B/s behind a corporate proxy, it's almost always
 > the `xet` transport failing TLS - retry with `HF_HUB_DISABLE_XET=1`.
 
 Then:
@@ -186,10 +191,10 @@ zig build run -- serve C:\Models\Qwen3-30B-A3B-FP8 --port 8080 --expert-cap 128
 curl http://127.0.0.1:8080/v1/chat/completions -H "content-type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"hi!\"}]}"
 ```
 
-The 176B `Qwen/Qwen3.8-Flash-Next-FP8` (~173 GiB on disk) works exactly the
-same way - swap the model directory and, on a memory-constrained box, raise
-`--ram-limit` / lower `--expert-cap` to taste; `inspect` will tell you up front
-whether your budget fits.
+The 176B checkpoint works exactly the same way - just point every command at
+`C:\Models\Qwen3.8-Flash-Next-FP8` instead, and on a memory-constrained box
+raise `--ram-limit` / lower `--expert-cap` to taste; `inspect` will tell you
+up front whether your budget fits.
 
 ## CLI reference
 
