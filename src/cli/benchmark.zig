@@ -25,6 +25,7 @@ pub fn run(
     parallel.enable(io, opts.threads);
     defer parallel.disable();
     if (opts.cuda) gpu.init(err);
+    if (opts.cuda) gpu.setVramBudget(if (opts.vram != 0) opts.vram else 16 << 30);
     defer gpu.deinit();
     var meter = meter_mod.Meter.init(gpa_in);
     const gpa = meter.allocator();
@@ -158,4 +159,5 @@ pub fn run(
     });
 
     try timers.print(out);
+    gpu.statsLine(out);
 }

@@ -1,9 +1,18 @@
-# CUDA backend (`--cuda`) — Phase 10a
+# CUDA backend (`--cuda`) — Phase 10
 
 The engine is CPU-first. Phase 10 adds an **optional** GPU path for the one
 kernel that dominates decode — the block-FP8 MoE-expert matmul — behind the
 `--cuda` flag. CUDA is never a build or run dependency: no DLL, no device, or a
 missing symbol just means every op stays on the CPU.
+
+- **10a**: plumbing + the kernel; every call re-uploads its weights.
+- **10b**: `--vram <size>` — a bounded LRU cache of resident expert weights in
+  VRAM (`key`-addressed), so a hot expert's ~1.6 MB is uploaded once.
+
+**Measured verdict on the dev box (Quadro T1000 Max-Q, 4 GB): `--cuda` is ~2×
+slower than the warm CPU path and 10b does not change that** — see "Result"
+below. The backend is kept because it is correct and will help on a GPU with
+more VRAM; on 4 GB it is a demo, not a speedup.
 
 ## Layout
 
@@ -73,12 +82,37 @@ The DLL keeps **one** device context with shared upload buffers, so
 `gpu.matmulFp8` holds a spinlock across the call and `moe.forwardDense` skips its
 per-expert CPU thread fan-out when the GPU is up (the GPU is the parallelism).
 
-## Status / what 10a is not
+### `--cuda-verify`
 
-10a **re-uploads each expert's ~1.5 MB of weights over PCIe on every call** — no
-VRAM weight cache. On the T1000 Max-Q (4 GB, ~128 GB/s, PCIe-limited) that makes
-`--cuda` decode currently **slower than the warm CPU path**; prefill (fewer,
-larger matmuls) already benefits. The number this produces is the baseline that
-motivates **10b**: a bounded VRAM expert cache filled from the `.colizig_usage`
-priors, so hot experts are resident and only cold ones stream. See
-`docs/BENCHMARK.md` for the measured figures.
+Recompute each GPU matmul on the CPU and print the divergence; a summary line
+reports the worst `relΔ` over the run. `max|Δ| ≈ 1e-7` per matmul on the real
+checkpoint — the GPU arithmetic is not the problem, the byte movement is.
+
+## 10b — VRAM weight cache
+
+`--vram <size>` (default: most of free VRAM) turns on a bounded LRU cache inside
+the DLL. Each `Fp8Matrix` carries a stable `key` (`1 + ((layer*512 + expert)*4 +
+role)`); a keyed call checks the resident set — a **hit** skips the ~1.6 MB
+weight upload and runs the kernel straight from VRAM, a **miss** uploads and
+admits (evicting the LRU slot). `--cuda` prints
+`cuda: N matmuls  VRAM cache X% hit (R resident experts)  M MiB pushed H2D`.
+
+## Result (T1000 Max-Q, 4 GB, real checkpoint, warm)
+
+| | decode tok/s | notes |
+|---|---|---|
+| CPU (12 threads) | **0.75** | memory-bandwidth-bound |
+| `--cuda` 10a | 0.35 | re-uploads every call |
+| `--cuda` 10b | 0.35 | VRAM cache **26 % hit** — no better |
+
+Why 10b doesn't help *here*: 4 GB holds ~1850 weight slots ≈ **13 experts per
+layer**, but a short generation routes to ~50+ distinct experts per layer, so the
+cache thrashes (26 % hit) and 74 % of calls still push 1.6 MB over the laptop's
+PCIe link. The per-call synchronous kernel launch (~1700 / token) and pageable
+(un-pinned, mmap-backed) H2D copies are a fixed tax on top.
+
+The MoE-in-VRAM approach needs a card that can hold most of the working set —
+**8 GB+** would put the hit rate where it pays. On 4 GB the alternatives are 10c
+(pinned staging + async streams + batched multi-expert kernels) or a different
+tiering (resident dense weights + `lm_head` in VRAM, experts on the CPU). Both
+are open; neither is obviously worth it on a 35 W Max-Q part.

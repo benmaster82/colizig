@@ -226,6 +226,7 @@ pub fn run(
     parallel.enable(io, opts.threads);
     defer parallel.disable();
     if (opts.cuda) gpu.init(err);
+    if (opts.cuda) gpu.setVramBudget(if (opts.vram != 0) opts.vram else 16 << 30);
     defer gpu.deinit();
 
     var dir = openDirAny(io, opts.model_dir) catch {

@@ -34,6 +34,9 @@ pub const Options = struct {
     cuda: bool = false,
     /// bring-up aid: recompute each GPU matmul on the CPU and print the divergence.
     cuda_verify: bool = false,
+    /// `--cuda`: VRAM budget for the resident expert-weight cache (0 = auto: most
+    /// of free VRAM). Parsed like `--ram-limit` (e.g. 2G, 3GiB).
+    vram: u64 = 0,
 };
 
 pub const Error = error{ MissingModelDir, BadFlag, MissingValue } || std.Io.Writer.Error;
@@ -62,6 +65,7 @@ pub fn parse(
     var b_seed: u64 = 0;
     var b_cuda: bool = false;
     var b_cuda_verify: bool = false;
+    var b_vram: u64 = 0;
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -121,6 +125,12 @@ pub fn parse(
         } else if (std.mem.eql(u8, a, "--cuda-verify")) {
             b_cuda = true;
             b_cuda_verify = true;
+        } else if (std.mem.eql(u8, a, "--vram")) {
+            const v = try value(args, &i, "--vram", err);
+            b_vram = units.parseBytes(v) catch {
+                try err.print("--vram: not a valid size: \"{s}\"\n", .{v});
+                return error.BadFlag;
+            };
         } else if (std.mem.eql(u8, a, "--mirror")) {
             b_mirror = try value(args, &i, "--mirror", err);
         } else if (std.mem.eql(u8, a, "--temperature") or std.mem.eql(u8, a, "--temp")) {
@@ -191,6 +201,7 @@ pub fn parse(
         .seed = b_seed,
         .cuda = b_cuda,
         .cuda_verify = b_cuda_verify,
+        .vram = b_vram,
     };
 }
 

@@ -50,8 +50,8 @@ is **token-for-token identical to the independent C engine
 | perf: FP8/BF16 matmul SIMD-vectorized, O(1) tensor index, experts borrow the shard mmap (no copy), prefill token→expert grouping — ~10× vs first real run | ✅ |
 | **real-weight validation**: greedy decode token-for-token identical to colibri (independent C engine) on `Qwen/Qwen3.8-Flash-Next-FP8` | ✅ |
 | sampling (`--temperature` / `--top-k` / `--top-p` / `--seed`); learned expert priors (`.colizig_usage`); dual-SSD `--mirror` | ✅ |
-| **CUDA backend** (`--cuda`, `src/backend/`): block-FP8 matmul on the GPU via a runtime-loaded `colizig_cuda.dll`; bit-identical, optional, CPU fallback (Phase 10a) | ✅ |
-| 10b VRAM expert cache · QSA per-head threading · MTP speculative decode | ❌ remaining |
+| **CUDA backend** (`--cuda` / `--vram`, `src/backend/`): block-FP8 matmul on the GPU via a runtime-loaded `colizig_cuda.dll` + a VRAM weight-cache; bit-identical, optional, CPU fallback (Phase 10a/10b). *Measured ~2× slower than CPU on a 4 GB T1000 — needs 8 GB+ VRAM to win.* | ✅ |
+| 10c async/batched CUDA · QSA per-head threading · MTP speculative decode | ❌ remaining |
 
 `selftest` runs kernel + plumbing checks. Nothing is faked: an incomplete
 subsystem returns an error rather than a wrong number (brief §29).

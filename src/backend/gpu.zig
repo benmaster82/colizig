@@ -20,6 +20,8 @@ const is_windows = builtin.os.tag == .windows;
 const InitFn = *const fn () callconv(.c) c_int;
 const ShutdownFn = *const fn () callconv(.c) void;
 const NameFn = *const fn () callconv(.c) [*:0]const u8;
+const SetBudgetFn = *const fn (bytes: u64) callconv(.c) void;
+const StatsFn = *const fn (hits: *u64, misses: *u64, uploaded_mib: *u64, resident: *u64) callconv(.c) void;
 const MatmulFp8Fn = *const fn (
     y: [*]f32,
     x: [*]const f32,
@@ -28,6 +30,7 @@ const MatmulFp8Fn = *const fn (
     s: c_int,
     i: c_int,
     o: c_int,
+    key: u64,
 ) callconv(.c) c_int;
 
 const HMODULE = *opaque {};
@@ -42,6 +45,8 @@ var name_len: usize = 0;
 
 var f_shutdown: ShutdownFn = undefined;
 var f_matmul_fp8: MatmulFp8Fn = undefined;
+var f_set_budget: SetBudgetFn = undefined;
+var f_stats: StatsFn = undefined;
 
 // The DLL keeps one global device context with shared buffers, so calls into it
 // must be serialised. `moe.forwardDense` already skips its per-expert thread
@@ -80,6 +85,8 @@ pub fn init(err: *std.Io.Writer) void {
     const name_fn = sym(h, NameFn, "colizig_cuda_device_name") orelse return fail(h, err, "colizig_cuda_device_name");
     const shutdown_fn = sym(h, ShutdownFn, "colizig_cuda_shutdown") orelse return fail(h, err, "colizig_cuda_shutdown");
     const matmul_fn = sym(h, MatmulFp8Fn, "colizig_cuda_matmul_fp8") orelse return fail(h, err, "colizig_cuda_matmul_fp8");
+    const budget_fn = sym(h, SetBudgetFn, "colizig_cuda_set_vram_budget") orelse return fail(h, err, "colizig_cuda_set_vram_budget");
+    const stats_fn = sym(h, StatsFn, "colizig_cuda_stats") orelse return fail(h, err, "colizig_cuda_stats");
 
     const rc = init_fn();
     if (rc != 0) {
@@ -94,6 +101,8 @@ pub fn init(err: *std.Io.Writer) void {
 
     f_shutdown = shutdown_fn;
     f_matmul_fp8 = matmul_fn;
+    f_set_budget = budget_fn;
+    f_stats = stats_fn;
     handle = h;
     ready = true;
     err.print("--cuda: CUDA backend up — {s}\n", .{name_buf[0..name_len]}) catch {};
@@ -142,8 +151,27 @@ pub fn deviceName() []const u8 {
     return name_buf[0..name_len];
 }
 
-/// GPU block-FP8 matmul: `y[S,O] = x[S,I] @ dequant(w)ᵀ`.
-/// Returns true if the GPU handled it; false → the caller must run the CPU path.
+/// Bytes of VRAM the weight cache may use (10b). 0 = cache off (every keyed call
+/// re-uploads, like 10a). Clamped to free VRAM inside the DLL.
+pub fn setVramBudget(bytes: u64) void {
+    if (ready) f_set_budget(bytes);
+}
+
+pub fn statsLine(w: *std.Io.Writer) void {
+    if (!ready) return;
+    var hits: u64 = 0;
+    var misses: u64 = 0;
+    var up_mib: u64 = 0;
+    var resident: u64 = 0;
+    f_stats(&hits, &misses, &up_mib, &resident);
+    const total = hits + misses;
+    const pct: f64 = if (total == 0) 0 else 100.0 * @as(f64, @floatFromInt(hits)) / @as(f64, @floatFromInt(total));
+    w.print("  cuda: {d} matmuls  VRAM cache {d:.1}% hit ({d} resident experts)  {d} MiB pushed H2D\n", .{ total, pct, resident, up_mib }) catch {};
+}
+
+/// GPU block-FP8 matmul: `y[S,O] = x[S,I] @ dequant(w)ᵀ`. `key` identifies the
+/// weight for the VRAM cache (0 = do not cache). Returns true if the GPU handled
+/// it; false → the caller must run the CPU path.
 pub fn matmulFp8(
     y: []f32,
     x: []const f32,
@@ -152,11 +180,12 @@ pub fn matmulFp8(
     S: usize,
     I: usize,
     O: usize,
+    key: u64,
 ) bool {
     if (!ready) return false;
     lock();
     defer unlock();
-    const rc = f_matmul_fp8(y.ptr, x.ptr, w.ptr, scales.ptr, @intCast(S), @intCast(I), @intCast(O));
+    const rc = f_matmul_fp8(y.ptr, x.ptr, w.ptr, scales.ptr, @intCast(S), @intCast(I), @intCast(O), key);
     return rc == 0;
 }
 
@@ -166,6 +195,7 @@ test "gpu backend is gracefully unavailable without the DLL" {
     var w: std.Io.Writer = .fixed(&buf);
     init(&w);
     try std.testing.expect(!available()); // no colizig_cuda.dll in the test env
-    try std.testing.expect(!matmulFp8(&.{}, &.{}, &.{}, &.{}, 1, 1, 1));
+    try std.testing.expect(!matmulFp8(&.{}, &.{}, &.{}, &.{}, 1, 1, 1, 0));
+    setVramBudget(1 << 30); // no-op when unavailable
     deinit();
 }

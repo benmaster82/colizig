@@ -31,6 +31,7 @@ pub fn run(
     defer parallel.disable();
     if (opts.cuda) gpu.init(err);
     gpu.verify = opts.cuda_verify;
+    if (opts.cuda) gpu.setVramBudget(if (opts.vram != 0) opts.vram else 16 << 30);
     defer gpu.deinit(); // no-op unless it came up
     defer gpu.verifySummary();
 
@@ -204,6 +205,8 @@ pub fn run(
         if (expert_reqs == 0) @as(f64, 0) else 100.0 * @as(f64, @floatFromInt(pf_hits)) / @as(f64, @floatFromInt(expert_reqs)),
         expert_reqs,
     });
+
+    gpu.statsLine(out);
 }
 
 fn elapsedNs(io: std.Io, from: std.Io.Timestamp) u64 {

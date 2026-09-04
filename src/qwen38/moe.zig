@@ -52,6 +52,9 @@ pub const Fp8Matrix = struct {
     data: []const u8,
     scales: []f32, // [nblk(rows)*nblk(cols)] f32, owned
     allocator: std.mem.Allocator,
+    /// Stable identity for the CUDA VRAM weight cache (0 = never cache).
+    /// `1 + ((layer*512 + expert)*4 + role)`, role ∈ {0:gate, 1:up, 2:down}.
+    key: u64 = 0,
 
     pub fn load(gpa: std.mem.Allocator, weight: View, scale: View) !Fp8Matrix {
         if (weight.dtype != .f8_e4m3 or weight.shape.len != 2) return error.BadExpertWeight;
@@ -83,7 +86,11 @@ pub const Fp8Matrix = struct {
 
     /// y[S, rows] = x[S, cols] @ dequant(self)ᵀ
     pub fn matmul(self: Fp8Matrix, y: []f32, x: []const f32, S: usize) void {
-        fp8.matmulFp8(y, x, self.data, self.scales, S, self.cols, self.rows);
+        fp8.matmulFp8Keyed(y, x, self.data, self.scales, S, self.cols, self.rows, self.key);
+    }
+
+    pub fn expertKey(layer: u32, expert: u32, role: u2) u64 {
+        return 1 + (@as(u64, layer) * 512 + expert) * 4 + role;
     }
 };
 
@@ -264,13 +271,17 @@ fn loadExpert(gpa: std.mem.Allocator, w: *const Weights, layer: u32, d: Dims, id
     errdefer gate.deinit();
     var up = try one(gpa, w, &nb, &sb, layer, id, "up_proj");
     errdefer up.deinit();
-    const down = try one(gpa, w, &nb, &sb, layer, id, "down_proj");
+    var down = try one(gpa, w, &nb, &sb, layer, id, "down_proj");
 
     // shape sanity against config
     if (gate.rows != d.inter or gate.cols != d.hidden or
         up.rows != d.inter or up.cols != d.hidden or
         down.rows != d.hidden or down.cols != d.inter)
         return error.ExpertShapeMismatch;
+
+    gate.key = Fp8Matrix.expertKey(layer, id, 0);
+    up.key = Fp8Matrix.expertKey(layer, id, 1);
+    down.key = Fp8Matrix.expertKey(layer, id, 2);
 
     return .{ .id = id, .gate = gate, .up = up, .down = down };
 }

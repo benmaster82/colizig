@@ -283,10 +283,23 @@ CPU: `max|Δ| ≈ 1e-7` over a full decode.
 matmuls per token; the PCIe transfer and launch overhead dwarf the kernel. The
 GPU FP8 arithmetic itself is not the problem — the byte movement is.
 
-This is the baseline that sizes **10b**: a bounded VRAM expert cache filled from
-the `.colizig_usage` priors so hot experts are resident and only cold ones
-stream. At ~90 % hot coverage the per-token PCIe traffic drops ~10×, and the
-T1000's 128 GB/s VRAM (vs the CPU's ~40 GB/s bus) should finally pay off.
+### 10b — VRAM weight cache
+
+`--vram <size>` adds a bounded LRU cache of resident expert weights in the DLL,
+keyed by `(layer, expert, role)`. A hit skips the ~1.6 MB upload.
+
+| | decode tok/s | VRAM cache |
+|---|---|---|
+| CPU (12 threads) | 0.75 | — |
+| `--cuda` 10a | 0.35 | — |
+| `--cuda --vram auto` (10b) | 0.35 | **26 % hit**, ~1850 experts resident |
+
+**10b gives nothing on this box.** 4 GB holds ~13 experts/layer; a 21-token run
+routes to ~50+ distinct per layer → the cache thrashes at 26 % hit, and 74 % of
+the ~1700 matmuls/token still push 1.6 MB over the laptop PCIe link. Removing the
+redundant per-call `cudaDeviceSynchronize` didn't move it either. The
+MoE-in-VRAM design needs an **8 GB+** card for the hit rate to matter. `--cuda`
+output stays token-for-token identical to CPU/colibri throughout.
 
 Non-obvious bug found and fixed: the CUDA runtime flips the host thread's SSE
 control word to flush-to-zero, silently corrupting every subsequent CPU float

@@ -160,8 +160,9 @@ fn dotFp8Row(x: []const f32, w: []const u8, scale_row: []const f32) f32 {
 }
 
 /// y[S, O] = x[S, I] @ (dequant(w))ᵀ, with `w` row-major `[O, I]` E4M3 and
-/// `scales` row-major `[nblk(O), nblk(I)]`.
-pub fn matmulFp8(
+/// `scales` row-major `[nblk(O), nblk(I)]`. `key` (0 = none) identifies this
+/// weight to the CUDA VRAM cache — see `backend/gpu.zig`.
+pub fn matmulFp8Keyed(
     y: []f32,
     x: []const f32,
     w: []const u8,
@@ -169,20 +170,27 @@ pub fn matmulFp8(
     S: usize,
     I: usize,
     O: usize,
+    key: u64,
 ) void {
     const nbi = nblk(I);
     std.debug.assert(x.len == S * I and w.len == O * I and y.len == S * O);
     std.debug.assert(scales.len == nblk(O) * nbi);
     std.debug.assert(I <= max_dequant_row);
 
-    // Phase 10a: if the CUDA backend is up (`--cuda`), it takes the whole matmul.
-    // It re-uploads the weights every call for now; false → fall to the CPU.
-    if (gpu.matmulFp8(y, x, w, scales, S, I, O)) {
+    // Phase 10: with `--cuda` up, the GPU takes the whole matmul (VRAM-cached by
+    // `key`); false → fall to the CPU.
+    if (gpu.matmulFp8(y, x, w, scales, S, I, O, key)) {
         if (gpu.verify) verifyGpu(y, x, w, scales, S, I, O, nbi);
         return;
     }
 
     matmulFp8Cpu(y, x, w, scales, S, I, O, nbi);
+}
+
+/// Unkeyed convenience — the tiny-fixture tests and any FP8 matmul without a
+/// stable identity (never cached on the GPU).
+pub fn matmulFp8(y: []f32, x: []const f32, w: []const u8, scales: []const f32, S: usize, I: usize, O: usize) void {
+    matmulFp8Keyed(y, x, w, scales, S, I, O, 0);
 }
 
 /// GPU-result check (`--cuda-verify`): recompute on the CPU into a scratch and

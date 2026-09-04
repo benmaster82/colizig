@@ -35,7 +35,7 @@ const usage =
     \\  --no-usage          chat/forward: don't read/write <MODEL_DIR>/.colizig_usage (learned expert priors)
     \\  --mirror <dir>      second copy of the checkpoint on another drive; routed-expert reads split across both
     \\  --temperature <f>  chat/forward: sampling temperature; 0 = greedy (default). also --top-k <n>, --top-p <f>, --seed <n>
-    \\  --cuda              chat/forward/benchmark: run the block-FP8 matmul on the GPU via colizig_cuda.dll (`zig build cuda`); CPU if absent
+    \\  --cuda [--vram <size>]  chat/forward/benchmark: run the block-FP8 matmul on the GPU via colizig_cuda.dll; CPU if absent. --vram caps the resident expert cache (default: most of free VRAM)
     \\  --gpu <mode>         none | auto ; memory-plan hint only
     \\  -h, --help           show this message
     \\

@@ -36,8 +36,8 @@ ends with: build ✅ · test ✅ · benchmark (once kernels exist) · document.
 | — | AVX2 / FMA kernel pass (`dotF32`/`dotBf16` 4× `@mulAdd`; fused `dotFp8Row` for S==1) | **done** |
 | MTP | Speculative decode via the checkpoint's MTP head | **investigated, declined** — see below |
 | **10a** | CUDA backend plumbing + the block-FP8 matmul on the GPU (`--cuda`), bit-identical | **done** |
-| 10b | VRAM expert cache from `.colizig_usage` priors; stream only cold experts | |
-| 10c | overlap H2D with compute; tune the VRAM budget split; prefetch | |
+| **10b** | bounded VRAM LRU cache of resident expert weights (`--vram`) | **done — no speedup on 4 GB** |
+| 10c | pinned staging + async streams + batched multi-expert kernels | *open, uncertain on a Max-Q* |
 
 ## Phase 1 deliverables
 
@@ -370,9 +370,17 @@ See `docs/GPU.md`. The one non-obvious fix: the CUDA runtime sets the host
 thread's SSE flush-to-zero mode, corrupting every subsequent CPU float op —
 each ABI call now saves/restores MXCSR.
 
-10a re-uploads each expert over PCIe every call (no VRAM cache), so `--cuda`
-decode is currently ~CPU-speed or slower; **10b** (VRAM expert cache from the
-`.colizig_usage` priors) is where the win is. Figures in `docs/BENCHMARK.md`.
+**10b** adds `--vram <size>`: a bounded LRU cache of resident expert weights in
+VRAM, keyed by `Fp8Matrix.key`. A hit skips the ~1.6 MB weight upload.
+
+**Measured**: on the 4 GB T1000 the cache holds ~13 experts/layer, a short
+generation routes to ~50+, so it thrashes at **26 % hit** and `--cuda` decode
+stays **~2× slower than the warm CPU** (0.35 vs 0.75 tok/s). The MoE-in-VRAM
+approach needs an 8 GB+ card to reach a hit rate that pays. 10c (pinned staging,
+async streams, batched kernels) or a dense-weights-in-VRAM pivot are the
+remaining options; on a 35 W Max-Q neither is clearly worth it. The backend is
+kept — correct, opt-in, and useful on better hardware. Figures in
+`docs/BENCHMARK.md` / `docs/GPU.md`.
 
 ## Real-checkpoint bring-up + perf pass (2026-09)
 
