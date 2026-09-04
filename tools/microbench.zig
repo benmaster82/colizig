@@ -1,4 +1,4 @@
-//! Standalone kernel micro-benchmark — isolates the FP8 / BF16 inner loops from
+//! Standalone kernel micro-benchmark - isolates the FP8 / BF16 inner loops from
 //! all the I/O, threading and cache noise in `benchmark`.
 //!
 //!   zig run -O ReleaseFast tools/microbench.zig
@@ -165,7 +165,7 @@ const e4m3_lut: [256]f32 = blk: {
     break :blk t;
 };
 
-/// scalar LUT loop — let LLVM auto-vectorise (it can emit vgatherdps on AVX2).
+/// scalar LUT loop - let LLVM auto-vectorise (it can emit vgatherdps on AVX2).
 fn dotFp8LutScalar(x: []const f32, w: []const u8, scale_row: []const f32) f32 {
     var acc: f32 = 0;
     for (w, 0..) |b, i| acc += x[i] * e4m3_lut[b] * scale_row[i / block];

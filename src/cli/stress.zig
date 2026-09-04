@@ -1,4 +1,4 @@
-//! `stress` — sweep RAM budgets, verify the memory plan holds and our tracked
+//! `stress` - sweep RAM budgets, verify the memory plan holds and our tracked
 //! peak stays under the limit, report tok/s and the expert-cache hit rate at
 //! each (brief §26).
 
@@ -59,9 +59,9 @@ pub fn run(
         if (!plan.fits) {
             try out.print(" {f:>10} | {f:>12} | {s:>12} | {s:>10} | {s:>9} | DOES NOT FIT\n", .{
                 h(limit), h(plan.fixed_resident),
-                "—",
-                "—",
-                "—",
+                "-",
+                "-",
+                "-",
             });
             continue;
         }
@@ -70,9 +70,9 @@ pub fn run(
         const row = runOne(meter.allocator(), io, opts.model_dir, m.cfg, plan, ctx, prompt_len, steps) catch |e| {
             try out.print(" {f:>10} | {f:>12} | {s:>12} | {s:>10} | {s:>9} | error: {s}\n", .{
                 h(limit),      h(plan.total_resident),
-                "—",
-                "—",
-                "—",
+                "-",
+                "-",
+                "-",
                 @errorName(e),
             });
             continue;

@@ -1,8 +1,8 @@
-//! MemoryManager — budget planning half (Phase 1).
+//! MemoryManager - budget planning half (Phase 1).
 //!
 //! Given the architecture, the measured resident-weight size, a RAM budget and a
 //! context length, compute where every resident byte goes and pick the largest
-//! routed-expert cache that still fits.  If nothing fits, say so — the engine
+//! routed-expert cache that still fits.  If nothing fits, say so - the engine
 //! must never silently exceed its budget (brief §8, §17).
 //!
 //! The runtime tier/state machine (COLD/PREFETCHED/RESIDENT/IN_USE/EVICTABLE,
@@ -102,7 +102,7 @@ pub const Plan = struct {
             \\  scratch (peak):    {f}
             \\  ======== private resident (must fit):  {f}
             \\  expert stream:     {f}   (cap {d}/layer x {f}/expert x {d} layers)
-            \\                     reclaimable OS page cache — E4M3 pages fault
+            \\                     reclaimable OS page cache - E4M3 pages fault
             \\                     from the shard mmap on demand, not malloc'd
             \\  -------- recommended RAM (private + hot experts): {f}
             \\
@@ -136,7 +136,7 @@ fn ceilDiv(a: u64, b: u64) u64 {
 
 /// Estimate the BF16-resident dense weight bytes from the config alone (for the
 /// metadata-only path, when shard headers are unavailable).  Everything except
-/// the routed experts and the n-gram table is resident in BF16 (2 B/elem) — see
+/// the routed experts and the n-gram table is resident in BF16 (2 B/elem) - see
 /// the checkpoint's `modules_to_not_convert`.
 pub fn estimateResidentBytes(cfg: Cfg) u64 {
     const H: u64 = cfg.hidden;
@@ -225,7 +225,7 @@ pub fn plan(cfg: Cfg, resident_weights: u64, opts: Options) Plan {
     } else {
         // The private set fits, so the model runs.  Pick the largest expert-cache
         // cap whose reclaimable stream also stays under budget; if even the
-        // smallest doesn't, keep the smallest — the OS page cache just recycles
+        // smallest doesn't, keep the smallest - the OS page cache just recycles
         // E4M3 pages more aggressively (slower, still correct).
         const min_cap = cap_ladder[cap_ladder.len - 1];
         chosen_cap = min_cap;

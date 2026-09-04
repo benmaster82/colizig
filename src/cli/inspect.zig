@@ -1,4 +1,4 @@
-//! `inspect` — report the architecture and a memory-budget plan for a
+//! `inspect` - report the architecture and a memory-budget plan for a
 //! checkpoint, reading ONLY config.json and the safetensors headers.  No tensor
 //! body is ever read here.
 
@@ -101,7 +101,7 @@ pub fn run(
     if (m.metadata_only) {
         try out.print(
             \\
-            \\  (metadata-only: shard files absent — tensor names & categories from
+            \\  (metadata-only: shard files absent - tensor names & categories from
             \\   model.safetensors.index.json; per-tensor shapes/bytes are estimated)
             \\
         , .{});
@@ -125,7 +125,7 @@ pub fn run(
         \\
     , .{ n_total, n_resident, n_stream, n_cold, n_vision, n_mtp });
 
-    // Parameters (from shapes — only meaningful with the shard headers).
+    // Parameters (from shapes - only meaningful with the shard headers).
     const p_total = m.paramCount();
     const p_resident = m.paramCountByResidency(.resident);
     const p_stream = m.paramCountByResidency(.streamable);

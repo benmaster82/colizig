@@ -3,14 +3,14 @@
 //! `colizig_cuda.dll` (built by `zig build cuda`, nvcc → MSVC) is loaded when the
 //! CLI passes `--cuda`. If the DLL is absent, or has no usable device, or any
 //! symbol is missing, the backend stays **unavailable** and every op silently
-//! runs on the CPU — CUDA is never required to build or run the engine.
+//! runs on the CPU - CUDA is never required to build or run the engine.
 //!
 //! Zig 0.16's `std.DynLib` has no Windows implementation, so this uses
 //! `LoadLibraryA` / `GetProcAddress` directly; on non-Windows the whole module
 //! degrades to an always-unavailable stub.
 //!
 //! 10a exposes exactly one op: the block-FP8 matmul used by the MoE experts.
-//! Every call re-uploads its weights over PCIe (no VRAM weight cache yet — that
+//! Every call re-uploads its weights over PCIe (no VRAM weight cache yet - that
 //! is 10b); the point of 10a is a correct GPU path and an honest first number.
 
 const std = @import("std");
@@ -50,7 +50,7 @@ var f_stats: StatsFn = undefined;
 
 // The DLL keeps one global device context with shared buffers, so calls into it
 // must be serialised. `moe.forwardDense` already skips its per-expert thread
-// fan-out when the GPU is up, so this is only a safety net — cheap when
+// fan-out when the GPU is up, so this is only a safety net - cheap when
 // uncontended. (A per-thread / per-expert VRAM context is 10b.)
 var call_lock = std.atomic.Value(bool).init(false);
 
@@ -72,12 +72,12 @@ fn sym(h: HMODULE, comptime T: type, name: [*:0]const u8) ?T {
 pub fn init(err: *std.Io.Writer) void {
     if (ready) return;
     if (!is_windows) {
-        err.writeAll("--cuda: only wired for Windows so far — using CPU\n") catch {};
+        err.writeAll("--cuda: only wired for Windows so far - using CPU\n") catch {};
         return;
     }
 
     const h = LoadLibraryA("colizig_cuda.dll") orelse {
-        err.writeAll("--cuda: colizig_cuda.dll not found (build it with `zig build cuda`) — using CPU\n") catch {};
+        err.writeAll("--cuda: colizig_cuda.dll not found (build it with `zig build cuda`) - using CPU\n") catch {};
         return;
     };
 
@@ -90,7 +90,7 @@ pub fn init(err: *std.Io.Writer) void {
 
     const rc = init_fn();
     if (rc != 0) {
-        err.print("--cuda: no usable CUDA device (colizig_cuda_init rc={d}) — using CPU\n", .{rc}) catch {};
+        err.print("--cuda: no usable CUDA device (colizig_cuda_init rc={d}) - using CPU\n", .{rc}) catch {};
         _ = FreeLibrary(h);
         return;
     }
@@ -105,11 +105,11 @@ pub fn init(err: *std.Io.Writer) void {
     f_stats = stats_fn;
     handle = h;
     ready = true;
-    err.print("--cuda: CUDA backend up — {s}\n", .{name_buf[0..name_len]}) catch {};
+    err.print("--cuda: CUDA backend up - {s}\n", .{name_buf[0..name_len]}) catch {};
 }
 
 fn fail(h: HMODULE, err: *std.Io.Writer, missing: []const u8) void {
-    err.print("--cuda: {s} missing from colizig_cuda.dll — using CPU\n", .{missing}) catch {};
+    err.print("--cuda: {s} missing from colizig_cuda.dll - using CPU\n", .{missing}) catch {};
     _ = FreeLibrary(h);
 }
 
@@ -137,7 +137,7 @@ pub fn verifyReport(cpu_max_abs: f32, cpu_max_rel: f32, S: usize, I: usize, O: u
     // Only shout when the divergence is large enough to matter (f32 FP8 dot
     // rounding is ~1e-4 rel); otherwise just keep the running worst.
     if (cpu_max_rel > verify_worst) verify_worst = cpu_max_rel;
-    // Shout only on a genuinely large divergence — a big relΔ alone is usually
+    // Shout only on a genuinely large divergence - a big relΔ alone is usually
     // just a near-zero denominator.
     if (cpu_max_abs > 1e-3 and cpu_max_rel > 1e-2)
         std.debug.print("cuda-verify #{d}  S={d} I={d} O={d}   max|Δ|={e:.3}  max relΔ={e:.3}  <-- LARGE\n", .{ verify_calls, S, I, O, cpu_max_abs, cpu_max_rel });

@@ -11,7 +11,7 @@ always-on shared expert. Ported from colibri's `q38_moe_decode`.
 | `inter` (routed) / `shared_inter` | 640 / 640 |
 | `norm_topk` | true (renormalize gates over the selected experts) |
 
-## Resident per-layer weights (`Layer`) — `layers.i.mlp.*`
+## Resident per-layer weights (`Layer`) - `layers.i.mlp.*`
 
 | field | tensor | shape | dtype |
 |---|---|---|---|
@@ -22,7 +22,7 @@ always-on shared expert. Ported from colibri's `q38_moe_decode`.
 
 Real cost ≈ (router 2.5 MiB + shared 9.4 MiB) per layer × 48 ≈ 570 MiB resident.
 
-## Streamed experts — `Fp8Matrix` + `ExpertCache`
+## Streamed experts - `Fp8Matrix` + `ExpertCache`
 
 Each routed expert is 3 block-FP8 matrices (`experts.<e>.{gate,up,down}_proj`):
 
@@ -66,15 +66,15 @@ The router, shared expert and routed experts all consume the **same** MoE input
 
 `forward` splits on `S`:
 
-- **`S == 1` (`forwardDense`)** — per-token: route, pull the top-k experts into
+- **`S == 1` (`forwardDense`)** - per-token: route, pull the top-k experts into
   the cache serially, then fan their SwiGLU evaluation over `parallel.chunks`
   (one task per expert; each writes a disjoint `eo` row). The accumulate into
   `out` still runs in top-k order, so the result is **bit-identical** to the
   serial path. When threading is off, or `cap < topk`, it stays a plain serial
   loop. Warm-cache decode: MoE scales ~6.5× on 6c/12t (see `BENCHMARK.md`).
-- **`S > 1` (`forwardGrouped`)** — route every token, sort the `S·topk`
+- **`S > 1` (`forwardGrouped`)** - route every token, sort the `S·topk`
   `(token, slot)` pairs by expert id (`std.sort.pdq`), then evaluate each
-  **distinct** expert once against the batch of tokens that picked it — one pass
+  **distinct** expert once against the batch of tokens that picked it - one pass
   over its ~4.7 MiB E4M3 weights instead of one per token (a 16-token prompt
   routes to only ~76 distinct experts/layer on the real model). The paths
   accumulate `out` in a different order → f32 rounding difference only (< 1e-4).
@@ -98,4 +98,4 @@ eviction) costs only ~1 KB/expert of decoded scales.
 - Fused BF16 expert layout (`experts.gate_up_proj` / `down_proj`).
 - Parallel *expert loads* (the cache handoff is still serial; only the compute
   fans out).
-- Router replay/trace hooks (colibri's `rt_*`) — not needed here.
+- Router replay/trace hooks (colibri's `rt_*`) - not needed here.

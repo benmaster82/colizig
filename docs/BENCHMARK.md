@@ -1,16 +1,16 @@
 # `benchmark` / `stress` + instrumentation
 
-## `src/runtime/timers.zig` — `Timers`
+## `src/runtime/timers.zig` - `Timers`
 
 Per-subsystem wall-clock accounting via `std.Io.Timestamp` (`.awake`, monotonic).
 Phases: `embed`, `gated_residual` (all three reads summed), `deltanet`, `qsa`,
-`moe`, `ple`, `lm_head`. Whole-call timing — the phases overlap the dense
+`moe`, `ple`, `lm_head`. Whole-call timing - the phases overlap the dense
 matmuls inside them by design.
 
 Attached through `model.Opts.timers`. `forwards` counts forward passes so the
 report can show ms/forward.
 
-## `src/runtime/meter.zig` — `Meter`
+## `src/runtime/meter.zig` - `Meter`
 
 A pass-through `std.mem.Allocator` that tracks `current` and `peak` live bytes.
 This is **our** allocation accounting, not process RSS, but it lines up with the
@@ -59,7 +59,7 @@ Released `Qwen/Qwen3.8-Flash-Next-FP8`, `--expert-cap 512 --ram-limit 24G`.
 Cold page cache. Coherent English output; not yet logit-checked vs the reference.
 
 > These figures predate the `zig build` → ReleaseFast default and were likely
-> measured on a Debug build — treat them as a lower bound. The "A/B vs colibri"
+> measured on a Debug build - treat them as a lower bound. The "A/B vs colibri"
 > section below has current optimized numbers.
 
 | | first real run | after the perf pass |
@@ -73,24 +73,24 @@ arithmetic + ~1.5 s of cold expert page faults, mostly overlapped by the matmul
 worker fan-out), `deltanet` ~2.3 s, `lm_head` ~1.8 s, `qsa`/`gated_residual` < 1 s.
 
 What moved the needle, in order:
-1. **`dotBf16` SIMD** — vector widen+shift instead of a scalar `inline for` lane
+1. **`dotBf16` SIMD** - vector widen+shift instead of a scalar `inline for` lane
    loop; bit-identical; hit every BF16 matmul (GDN/QSA/residual/router/shared).
-2. **O(1) tensor index** — `Weights.find` was a linear scan of 152k names; the
+2. **O(1) tensor index** - `Weights.find` was a linear scan of 152k names; the
    MoE demand path does 6 lookups/expert, so this alone was ~15 s/run.
 3. **FP8 LUT + row-dequant + SIMD dot** in `matmulFp8`.
-4. **prefill token→expert grouping** — evaluate each distinct routed expert once
+4. **prefill token→expert grouping** - evaluate each distinct routed expert once
    against its batch (`moe.forwardGrouped`); the real model routes 16 tokens to
    only ~76 distinct experts/layer.
-5. **experts borrow the shard mmap** (no `dupe`) — cut private RAM, made the
+5. **experts borrow the shard mmap** (no `dupe`) - cut private RAM, made the
    cache cheap enough to run `--expert-cap 512`.
 
-Tried and reverted: async `std.Io.Group` expert-page prewarm — no win, the matmul
+Tried and reverted: async `std.Io.Group` expert-page prewarm - no win, the matmul
 fan-out already overlaps the cold reads and the demand path waits < 20 ms/forward.
 
 ## SIMD E4M3 dequant (2026-09)
 
 `fp8.dequantRow` decodes the E4M3 weight row with pure `@Vector` ops (the f32 bit
-pattern is built arithmetically — no 256-entry gather, which Zig 0.16 can't
+pattern is built arithmetically - no 256-entry gather, which Zig 0.16 can't
 vectorise). Bit-identical to the LUT. On the real model: **MoE decode compute
 −23%**, decode **0.20 → 0.23 tok/s**. The remaining MoE decode cost is now split
 ~half genuine FP8 arithmetic, ~half cold expert page-fault I/O (~1.2 s/forward),
@@ -117,29 +117,29 @@ Total wall time is unchanged for a short run (the ~7 s parallel page-warm at
 startup offsets the decode savings); it turns net-positive as the generation
 grows, and the priors keep accumulating across sessions. Bit-identical output.
 
-## Dual-SSD expert mirror (2026-09) — implemented, no win here
+## Dual-SSD expert mirror (2026-09) - implemented, no win here
 
 `--mirror <dir>` mmaps a second copy of the checkpoint's shards on another drive;
 `Weights.view` alternates routed-expert reads ~55/45 between the two. Correct
 (bit-identical output), opt-in, zero cost unused.
 
 A/B on this box (model on the slower BG4, 65/131 shards mirrored to the faster
-XG6), cache-flushed: **no measurable change** — 20-token decode 0.286→0.273 tok/s,
+XG6), cache-flushed: **no measurable change** - 20-token decode 0.286→0.273 tok/s,
 64-token prefill TTFT 89.1→91.2 s, MoE prefill 51.7 s both. Same reason the async
 prewarm gave nothing: after the LUT/O(1)-index/borrow/SIMD pass the MoE is
-**FP8-arithmetic-bound**, not expert-I/O-bound — `demand_ns` is ~0.4 s/run and the
+**FP8-arithmetic-bound**, not expert-I/O-bound - `demand_ns` is ~0.4 s/run and the
 matmul's `parallel.chunks` workers already overlap the cold FP8 page faults. The
 mirror would matter on a genuinely slow single drive or a much faster CPU; it
 does not on an i7-10750H + two NVMe SSDs.
 
-## Phase 9b — MoE per-expert threading (2026-09)
+## Phase 9b - MoE per-expert threading (2026-09)
 
 `moe.forwardDense` (the S==1 decode path, `cap >= topk`) now pulls the top-k
 experts into the cache serially, then fans their SwiGLU evaluation across worker
-threads — each expert writes a disjoint `eo` row, the reduce runs in top-k order,
+threads - each expert writes a disjoint `eo` row, the reduce runs in top-k order,
 so the result is **bit-identical** to the serial version. A `threadlocal
 in_worker` flag in `parallel.chunks` keeps each expert's own matmuls serial
-(the fan-out is over experts, not over matmul rows — coarser tasks, less
+(the fan-out is over experts, not over matmul rows - coarser tasks, less
 `std.Io.Group` overhead).
 
 Warm-cache decode-only benchmark, `--threads 1` vs `12`:
@@ -150,17 +150,17 @@ Warm-cache decode-only benchmark, `--threads 1` vs `12`:
 | MoE / forward | 9292 ms | **1433 ms** (6.5×) |
 | deltanet / forward | 1923 ms | 448 ms (4.3×) |
 
-MoE scales ~6.5× on 6 cores / 12 threads — decode ~0.34 tok/s warm, in colibri's
+MoE scales ~6.5× on 6 cores / 12 threads - decode ~0.34 tok/s warm, in colibri's
 range. The gain is masked on a cold run (the first forwards fault ~2.3 GB of
 expert weights from SSD).
 
 ## A/B vs colibri, both optimized (2026-09-03)
 
-> Build note: `zig build` now defaults to **ReleaseFast** (was Debug — a Debug
+> Build note: `zig build` now defaults to **ReleaseFast** (was Debug - a Debug
 > build is ~3× slower and the earlier "colibri is 1.4–2× faster" A/B was
 > measuring one). `-Doptimize=Debug` for a safety-checked build.
 
-`bench_ab2.ps1` — same checkpoint, prompt, token count, `--expert-cap 64`,
+`bench_ab2.ps1` - same checkpoint, prompt, token count, `--expert-cap 64`,
 12 threads, greedy. Each engine: flush OS page cache + wipe learned priors →
 **cold** run → immediate **warm** run (hot page cache + priors it just wrote).
 colibri built `-O3 -march=native -fopenmp` (mingw64).
@@ -173,7 +173,7 @@ Prompt "The capital of France is", 24 new tokens:
 | TTFT (cold / warm) | 18.1 / 17.7 s | **8.2 / 5.4 s** |
 | decode (cold / warm) | 0.39 / 0.38 tok/s | **0.78 / 1.02 tok/s** |
 | peak working set | 23.9 GB | 27.3 GB |
-| greedy output | — | **token-identical to colibri, cold and warm** |
+| greedy output | - | **token-identical to colibri, cold and warm** |
 
 Second prompt (48 tokens, reasoning-heavy): colibri 0.32 tok/s both, colizig
 0.55 cold / 0.51 warm, TTFT ~31 s vs ~13 s. Core generation matches; the two
@@ -185,7 +185,7 @@ identical greedy output on matched token input. Why the reversal:
 
 - Phase 9b MoE per-expert threading + the SIMD FP8/BF16 kernels + O(1) tensor
   index compound once compiled optimized.
-- colizig **borrows** the expert mmap — a warm OS page cache directly speeds
+- colizig **borrows** the expert mmap - a warm OS page cache directly speeds
   decode (0.78 → 1.02) and TTFT (8.2 → 5.4). colibri **copies** experts into its
   heap every process (RSS ~24 GB), so a warm page cache barely moves its
   throughput (0.39 → 0.38); it needs its persistent `coli chat` server to
@@ -201,7 +201,7 @@ cache, colibri's 24 GB is private; neither is logit-checked against HF weights
 ### expert-cap / thread sweep (warm, `bench_cap.ps1`)
 
 colizig only, "capital of France" 24 tok, all warm, back-to-back (the machine
-was thermally loaded from the A/B above — read the **columns relative to each
+was thermally loaded from the A/B above - read the **columns relative to each
 other**, not the absolute tok/s):
 
 | cap | threads | TTFT s | decode tok/s |
@@ -219,7 +219,7 @@ other**, not the absolute tok/s):
 - **12 threads > 6**: the MoE expert fan-out and the matmul row fan-out both use
   the extra logical cores. `--threads 0` (auto = 12 here) is right; don't pin to
   physical-core count.
-- Sustained benchmarking on this laptop thermally throttles — the first
+- Sustained benchmarking on this laptop thermally throttles - the first
   interactive use of a session runs faster than a marathon like this suggests.
 
 ## AVX2 / FMA kernel pass (2026-09-03)
@@ -228,14 +228,14 @@ other**, not the absolute tok/s):
 (FMA) accumulator chains; `ops/fp8.zig` gained a fused `dotFp8Row` for the
 `S == 1` decode path (decode straight into FMA chains, no f32 weight-row buffer).
 
-**Micro-benchmark** (`tools/microbench.zig` — single thread, L1-resident,
+**Micro-benchmark** (`tools/microbench.zig` - single thread, L1-resident,
 `I=2560 O=640`, run it with `zig run -O ReleaseFast tools/microbench.zig`):
 
 | kernel | µs/matmul | GFLOP/s |
 |---|---|---|
 | f32 dot, 1 accumulator | 193 | 17.0 |
 | f32 dot, 4× `@mulAdd` | **133** | **24.7** (1.46×) |
-| FP8: arith dequant only | 462 | — |
+| FP8: arith dequant only | 462 | - |
 | FP8: split (dequant→buf→dot) | 514 | 6.4 |
 | FP8: fused decode+FMA | **469** | 7.0 |
 | FP8: 256-LUT scalar (auto-vec) | 1462 | 2.2 |
@@ -243,7 +243,7 @@ other**, not the absolute tok/s):
 
 Takeaways: the FMA/accumulator change is a real 1.46× on the **pure f32/bf16**
 dot (GDN, QSA, gated-residual, LM head, router, shared expert). The **FP8 expert**
-kernel is ~90 % dequant and there is no easy win there on AVX2 — the arithmetic
+kernel is ~90 % dequant and there is no easy win there on AVX2 - the arithmetic
 decode already beats every LUT/gather variant (`vpgatherdps` is throttled on
 Comet Lake); fusing the decode into the dot saves ~9 % by dropping the buffer
 round-trip.
@@ -257,10 +257,10 @@ mmap page cache per token, and the i7-10750H's ~40 GB/s shared bus caps that
 around 1 tok/s regardless of how fast the dot runs. Same pattern as the I/O-side
 optimisations, mirrored: after the SIMD pass, compute is no longer the wall.
 
-The remaining real lever is the **GPU backend** (Phase 10 — deferred) or moving
+The remaining real lever is the **GPU backend** (Phase 10 - deferred) or moving
 fewer bytes (int4, out of scope).
 
-## Phase 10a — CUDA backend, first kernel (2026-09-04)
+## Phase 10a - CUDA backend, first kernel (2026-09-04)
 
 Hardware: NVIDIA **Quadro T1000 Max-Q** (4 GB, sm_75, ~128 GB/s), CUDA 13.0,
 MSVC 14.44. `--cuda` routes the block-FP8 MoE-expert matmul to
@@ -278,20 +278,20 @@ CPU: `max|Δ| ≈ 1e-7` over a full decode.
 | CPU (12 threads) | 0.68 |
 | `--cuda` (10a) | **0.35** |
 
-10a is **~2× slower than the CPU** — as expected. It re-uploads each expert's
+10a is **~2× slower than the CPU** - as expected. It re-uploads each expert's
 ~1.5 MB over PCIe on **every** call (≈2.3 GB/token), synchronously, ~1440 tiny
 matmuls per token; the PCIe transfer and launch overhead dwarf the kernel. The
-GPU FP8 arithmetic itself is not the problem — the byte movement is.
+GPU FP8 arithmetic itself is not the problem - the byte movement is.
 
-### 10b — VRAM weight cache
+### 10b - VRAM weight cache
 
 `--vram <size>` adds a bounded LRU cache of resident expert weights in the DLL,
 keyed by `(layer, expert, role)`. A hit skips the ~1.6 MB upload.
 
 | | decode tok/s | VRAM cache |
 |---|---|---|
-| CPU (12 threads) | 0.75 | — |
-| `--cuda` 10a | 0.35 | — |
+| CPU (12 threads) | 0.75 | - |
+| `--cuda` 10a | 0.35 | - |
 | `--cuda --vram auto` (10b) | 0.35 | **26 % hit**, ~1850 experts resident |
 
 **10b gives nothing on this box.** 4 GB holds ~13 experts/layer; a 21-token run

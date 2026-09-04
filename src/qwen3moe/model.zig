@@ -4,7 +4,7 @@
 //!   h += attn(rmsnorm(h, input_layernorm))
 //!   h += moe (rmsnorm(h, post_attention_layernorm))
 //! then `rmsnorm(h, model.norm)` and the LM head. No PLE / GDN / hyper-
-//! connections / shared expert — the MoE and FP8 kernels are shared with the
+//! connections / shared expert - the MoE and FP8 kernels are shared with the
 //! Qwen4-Exp path (`src/qwen38/moe.zig`); the attention is `qwen3moe/attn.zig`.
 
 const std = @import("std");
@@ -144,7 +144,7 @@ pub const State = struct {
     pub fn reset(self: *State) void {
         self.pos = 0;
         for (self.kv) |*c| c.reset();
-        // expert caches are content, not sequence state — leave them warm
+        // expert caches are content, not sequence state - leave them warm
     }
 
     pub fn deinit(self: *State) void {

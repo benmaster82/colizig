@@ -1,4 +1,4 @@
-//! Qwen Sparse Attention — the "full_attention" path for 12 of the 48 layers.
+//! Qwen Sparse Attention - the "full_attention" path for 12 of the 48 layers.
 //!
 //! Ported from colibri's `q38_attention`.  Per token:
 //!   project Q (+ sigmoid output gate), K, V, and a lightweight indexer q/k;
@@ -9,7 +9,7 @@
 //!   the output gate; `o_proj`.
 //!
 //! The K/V/indexer-key cache is the largest context-dependent memory consumer
-//! (~54 KiB/token on the real model) — size it from `--context` via the Phase 1
+//! (~54 KiB/token on the real model) - size it from `--context` via the Phase 1
 //! memory plan.
 
 const std = @import("std");

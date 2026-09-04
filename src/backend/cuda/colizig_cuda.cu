@@ -1,4 +1,4 @@
-// colizig CUDA backend — block-FP8 matmul behind a C ABI, compiled by nvcc into
+// colizig CUDA backend - block-FP8 matmul behind a C ABI, compiled by nvcc into
 // a standalone colizig_cuda.dll that the engine loads at runtime. CUDA is never
 // a build dependency of the engine; `zig build cuda` produces this DLL on demand.
 //
@@ -8,7 +8,7 @@
 // value = e4m3(byte) * scale[o/128, i/128]  (per-128x128-block f32 scale).
 //
 // Phase 10b: a bounded VRAM weight cache. A matmul call carries a `key`
-// (0 = uncached, upload every time — 10a behaviour); a non-zero key is looked up
+// (0 = uncached, upload every time - 10a behaviour); a non-zero key is looked up
 // in the resident set, so a hot expert's ~1.6 MB of weights are uploaded once and
 // then only the tiny activation vectors cross PCIe.
 
@@ -41,7 +41,7 @@ __constant__ float c_e4m3[256];
 // y[S,O] = x[S,I] @ dequant(w)^T ; w row-major [O,I] E4M3 ; scales [nblk(O),nblk(I)]
 // One thread block per output row. Accumulation mirrors the CPU reference:
 // f32 within a 128-column block, f64 across blocks with the block scale folded
-// once per block — keeps greedy decode token-for-token identical to the CPU.
+// once per block - keeps greedy decode token-for-token identical to the CPU.
 __global__ void mm_fp8_kernel(float* __restrict__ y, const float* __restrict__ x,
                               const uint8_t* __restrict__ w, const float* __restrict__ scales,
                               int S, int I, int O, int nbi) {
@@ -155,7 +155,7 @@ static int cache_slot_for(uint64_t key, size_t wb, size_t sb) {
             best = g.slot[i].clock; victim = i;
         }
     if (victim < 0) {
-        // no fitting slot — grow the globally-LRU one
+        // no fitting slot - grow the globally-LRU one
         for (int i = 0; i < g.n_slots; ++i)
             if (g.slot[i].clock < best) { best = g.slot[i].clock; victim = i; }
         if (victim < 0) return -1;
@@ -245,7 +245,7 @@ EXPORT int colizig_cuda_matmul_fp8(float* y, const float* x, const unsigned char
     if (key != 0 && g.vram_budget != 0) {
         int idx = cache_slot_for(key, wb, sb);
         if (idx < 0) {
-            key = 0;  // cache full of bigger blocks — fall through to scratch
+            key = 0;  // cache full of bigger blocks - fall through to scratch
         } else if (g.slot[idx].key == key) {
             g.hits++;
             g.slot[idx].clock = ++g.lru_clock;
@@ -278,7 +278,7 @@ EXPORT int colizig_cuda_matmul_fp8(float* y, const float* x, const unsigned char
         (float*)g.d_y, (const float*)g.d_x, (const uint8_t*)wdev, (const float*)sdev, S, I, O, nbi);
     if (cudaGetLastError() != cudaSuccess) return -4;
     // The blocking D2H copy on the default stream waits for the kernel, and
-    // returns an error if the kernel faulted — no separate sync needed.
+    // returns an error if the kernel faulted - no separate sync needed.
     if (cudaMemcpy(y, g.d_y, yb, cudaMemcpyDeviceToHost) != cudaSuccess) return -5;
     return 0;
 }

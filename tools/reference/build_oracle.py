@@ -34,7 +34,7 @@ TARGETS = [
 
 def build(fixture, ModelCls, generator):
     if not os.path.isdir(fixture):
-        print(f"{fixture} not found — run `zig build gen-fixture` first", file=sys.stderr)
+        print(f"{fixture} not found - run `zig build gen-fixture` first", file=sys.stderr)
         return False
     m = ModelCls(fixture)
     cases = []

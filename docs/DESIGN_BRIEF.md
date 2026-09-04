@@ -1,4 +1,4 @@
-# Project: qwen38-zig — Minimal Zig Inference Engine for Qwen3.8-Flash-Next on Non-Optimized Hardware
+# Project: qwen38-zig - Minimal Zig Inference Engine for Qwen3.8-Flash-Next on Non-Optimized Hardware
 
 > This is the original design brief, kept verbatim. The project has since been
 > renamed **colizig**; the docs' "§N" references point at the numbered sections
@@ -141,7 +141,7 @@ The runtime must know:
 
 ---
 
-# 4. Phase 1 — Repository and architecture analysis
+# 4. Phase 1 - Repository and architecture analysis
 
 Before writing significant code:
 
@@ -173,7 +173,7 @@ Use it only as an architectural reference.
 
 ---
 
-# 5. Phase 2 — Minimal runtime
+# 5. Phase 2 - Minimal runtime
 
 Create a small Zig runtime with:
 

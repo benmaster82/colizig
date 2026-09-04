@@ -1,4 +1,4 @@
-//! `benchmark` — run a prefill + N decode steps on a synthetic prompt and
+//! `benchmark` - run a prefill + N decode steps on a synthetic prompt and
 //! report the runtime telemetry (brief §23).  On the tiny fixture the numbers
 //! are toy-scale; on a real checkpoint they are the real thing.
 

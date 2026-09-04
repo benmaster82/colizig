@@ -1,4 +1,4 @@
-//! Gated DeltaNet — the linear-attention path used by 36 of the 48 layers.
+//! Gated DeltaNet - the linear-attention path used by 36 of the 48 layers.
 //!
 //! Ported from colibri's `q38_deltanet`.  Pipeline per token:
 //!   in_proj_{qkv,z,b,a}  →  causal depthwise conv1d (kernel CK) + SiLU
@@ -260,7 +260,7 @@ pub fn forward(
             }
         }
 
-        // gated-delta recurrent update, per value head — heads are independent
+        // gated-delta recurrent update, per value head - heads are independent
         // (own state slice, own delta scratch, own core slice).
         const RCtx = struct {
             rec: []f32,

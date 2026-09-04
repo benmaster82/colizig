@@ -1,4 +1,4 @@
-# Inference pipeline (target design — Phases 2–7)
+# Inference pipeline (target design - Phases 2–7)
 
 Phase 1 implements none of this; it is recorded here so the metadata core (config,
 manifest, budget) is built against the right end state.
@@ -73,5 +73,5 @@ next-layer working set · **LOW** = speculative. Speculative work must never
 starve mandatory work. Prefill and decode use different execution strategies
 (prefill groups tokens by expert; decode optimizes the single-token path).
 
-The primary metric for the whole project is **`compute_stall_due_to_io`** — time
+The primary metric for the whole project is **`compute_stall_due_to_io`** - time
 compute spends blocked on a read the scheduler failed to hide.

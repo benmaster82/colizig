@@ -1,7 +1,7 @@
-//! `selftest` — bring-up diagnostics for the Phase 2 primitives.
+//! `selftest` - bring-up diagnostics for the Phase 2 primitives.
 //!
 //! Runs numeric self-consistency checks on the `ops/` kernels (no model needed),
-//! and — if a model directory is given — exercises the weight-materialization
+//! and - if a model directory is given - exercises the weight-materialization
 //! path: mmap, embedding lookup, and the LM-head projection.
 //!
 //! This is NOT an inference run. The transformer layers do not exist yet; this
@@ -48,7 +48,7 @@ pub fn run(
         try out.writeAll("weights:\n");
         try weightChecks(gpa, io, &c, opts.model_dir, err);
     } else {
-        try out.writeAll("weights: (skipped — no model dir given)\n");
+        try out.writeAll("weights: (skipped - no model dir given)\n");
     }
 
     try out.print("\n{d} check(s) failed\n", .{c.failures});

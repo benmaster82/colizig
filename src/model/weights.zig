@@ -1,4 +1,4 @@
-//! Weights — the materialization layer on top of `Manifest`.
+//! Weights - the materialization layer on top of `Manifest`.
 //!
 //! Opens every shard once and memory-maps it whole (read-only); each tensor is
 //! then a zero-copy sub-slice.  If mmap is unavailable the shard is read into an
@@ -37,7 +37,7 @@ const Shard = struct {
 };
 
 /// Round-robin cursor for splitting routed-expert reads across the primary and
-/// a mirror drive.  Racy by design — both drives hold identical bytes, so an
+/// a mirror drive.  Racy by design - both drives hold identical bytes, so an
 /// uneven split is the only consequence.
 var mirror_rr: usize = 0;
 /// Of every 20 expert reads, this many go to the mirror; the rest to the

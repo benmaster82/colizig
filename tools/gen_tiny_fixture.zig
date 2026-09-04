@@ -1,4 +1,4 @@
-//! Generates `test/fixtures/tiny/` — a structurally faithful but minuscule
+//! Generates `test/fixtures/tiny/` - a structurally faithful but minuscule
 //! Qwen4-Exp checkpoint: a correct `config.json`, a `model.safetensors` whose
 //! header names and shapes match what `model/manifest.zig` classifies, and a
 //! `model.safetensors.index.json`.  Tensor bodies are zero-filled: Phase 1 reads
@@ -411,7 +411,7 @@ fn fillBody(dst: []u8, t: Tensor) void {
                 dst[k] = e4m3_demo[(seed +% k) % e4m3_demo.len];
             }
         },
-        .i64 => {}, // left zero — not decoded yet
+        .i64 => {}, // left zero - not decoded yet
     }
 }
 

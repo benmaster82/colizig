@@ -6,7 +6,7 @@
 //!
 //! Phase 2 decodes the resident dense dtypes: F32, F16, BF16.  FP8 (routed
 //! experts, PLE table) needs block/scalar scales and lands with those
-//! subsystems — it errors clearly here rather than returning wrong numbers.
+//! subsystems - it errors clearly here rather than returning wrong numbers.
 
 const std = @import("std");
 const builtin = @import("builtin");

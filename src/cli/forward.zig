@@ -1,4 +1,4 @@
-//! `forward` — run the end-to-end Qwen4-Exp forward on raw token ids.
+//! `forward` - run the end-to-end Qwen4-Exp forward on raw token ids.
 //!
 //! There is no tokenizer yet (Phase 8+), so this takes `--tokens` as a
 //! comma-separated list of integer ids and, with `--steps N`, greedily decodes

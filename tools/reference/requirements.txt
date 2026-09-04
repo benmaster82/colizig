@@ -1,2 +1,2 @@
-# Reference harness only — the engine itself has no dependencies.
+# Reference harness only - the engine itself has no dependencies.
 numpy>=1.24

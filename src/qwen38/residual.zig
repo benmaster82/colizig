@@ -1,4 +1,4 @@
-//! Gated residual ("hyper connections") — the 4-branch cross-layer read/write
+//! Gated residual ("hyper connections") - the 4-branch cross-layer read/write
 //! mixer wrapping every attention and MoE sub-block.  Ported from colibri's
 //! `q38_load_gr` / `q38_gr_read` / `q38_gr_apply`.
 //!

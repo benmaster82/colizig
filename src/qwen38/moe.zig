@@ -50,7 +50,7 @@ pub const Dims = struct {
 pub const Fp8Matrix = struct {
     rows: usize,
     cols: usize,
-    /// `[rows*cols]` E4M3 — a **borrowed** slice into a shard mmap (the shards
+    /// `[rows*cols]` E4M3 - a **borrowed** slice into a shard mmap (the shards
     /// outlive every `ExpertCache`).  Not copied: a demand load only decodes the
     /// tiny scale table; the E4M3 bytes fault in lazily through the OS page cache
     /// on first `matmul` and are reclaimed under memory pressure, not by us.
@@ -129,7 +129,7 @@ pub const CacheStats = struct {
     prefetch_hits: u64 = 0,
     /// A prefetched expert was evicted before any demand access consumed it.
     prefetch_wasted: u64 = 0,
-    /// Expert loads on the critical path (a demand miss) — the count form of
+    /// Expert loads on the critical path (a demand miss) - the count form of
     /// `compute_stall_due_to_io` for the MoE.
     demand_loads: u64 = 0,
     /// Expert loads that happened ahead of demand (prefetch).
@@ -147,7 +147,7 @@ pub const ExpertCache = struct {
     clock: u64 = 0,
     stats: CacheStats = .{},
     allocator: std.mem.Allocator,
-    /// Optional — enables wall-clock timing of demand-path expert loads.
+    /// Optional - enables wall-clock timing of demand-path expert loads.
     io: ?std.Io = null,
 
     pub fn init(gpa: std.mem.Allocator, layer: u32, cap: usize) !ExpertCache {
@@ -296,7 +296,7 @@ fn loadExpert(gpa: std.mem.Allocator, w: *const Weights, layer: u32, d: Dims, id
 
 pub const Layer = struct {
     router: NativeMatrix, // [experts, hidden]
-    // Shared expert — present only when `d.hasShared()` (absent in Qwen3-MoE).
+    // Shared expert - present only when `d.hasShared()` (absent in Qwen3-MoE).
     sh_gate_proj: ?NativeMatrix = null, // [shared_inter, hidden]
     sh_up_proj: ?NativeMatrix = null, // [shared_inter, hidden]
     sh_down_proj: ?NativeMatrix = null, // [hidden, shared_inter]
@@ -403,7 +403,7 @@ pub const Scratch = struct {
 ///
 /// Decode (`S == 1`) runs the straight per-token path.  Prefill (`S > 1`) routes
 /// every token first, then evaluates each distinct expert **once** against the
-/// batch of tokens that picked it — one pass over the 4.7 MiB expert weights
+/// batch of tokens that picked it - one pass over the 4.7 MiB expert weights
 /// instead of one per token.  The two paths accumulate `out` in a different
 /// order, so they differ only in f32 rounding (< 1e-4).
 pub fn forward(
@@ -495,7 +495,7 @@ fn forwardDense(
     const I = d.inter;
 
     // With the CUDA backend up, every expert matmul goes to the GPU through one
-    // serialised context — fanning experts over CPU threads here would only make
+    // serialised context - fanning experts over CPU threads here would only make
     // them queue on that lock, so stay serial and let the GPU be the parallelism.
     const par = cache.cap >= K and K <= 64 and !gpu.available();
 
@@ -511,7 +511,7 @@ fn forwardDense(
             // Pull the K experts into the cache serially (LRU mutation off the
             // parallel path; safe to hold all K pointers since cap >= K), then
             // evaluate them across worker threads into disjoint `eo` rows, then
-            // reduce in top-k order — bit-identical to the serial version.
+            // reduce in top-k order - bit-identical to the serial version.
             var ex: [64]*const Expert = undefined;
             for (0..K) |z| ex[z] = try cache.get(w, d, sc.idx[z]);
             evalExpertsParallel(ex[0..K], xs, sc.gates[0..K], sc, I, H);
@@ -538,7 +538,7 @@ fn forwardDense(
     }
 }
 
-/// Evaluate `experts` (SwiGLU, gate-scaled) into `sc.eo[z*H..]` — one row per
+/// Evaluate `experts` (SwiGLU, gate-scaled) into `sc.eo[z*H..]` - one row per
 /// expert, written disjointly so the fan-out needs no locking.  Each expert's
 /// own matmuls stay serial (the fan-out is over experts, see `parallel.chunks`).
 const EvalCtx = struct {
@@ -610,7 +610,7 @@ fn forwardGrouped(
     const K = d.topk;
     const I = d.inter;
 
-    // Phase 1 — route every token, apply its shared expert.
+    // Phase 1 - route every token, apply its shared expert.
     for (0..S) |s| {
         const xs = x[s * H ..][0..H];
         const ys = out[s * H ..][0..H];
@@ -629,12 +629,12 @@ fn forwardGrouped(
         }
     }
 
-    // Phase 2 — order the (token, slot) pairs by expert id.
+    // Phase 2 - order the (token, slot) pairs by expert id.
     const M = S * K;
     for (0..M) |i| sc.ord[i] = @intCast(i);
     std.sort.pdq(u32, sc.ord[0..M], @as([]const u32, sc.r_idx), expertSlotLess);
 
-    // Phase 3 — one expert at a time, batched over the tokens that chose it.
+    // Phase 3 - one expert at a time, batched over the tokens that chose it.
     var p: usize = 0;
     while (p < M) {
         const eid = sc.r_idx[sc.ord[p]];

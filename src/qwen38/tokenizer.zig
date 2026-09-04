@@ -20,7 +20,7 @@ pub const Error = error{
 pub const Special = struct {
     id: u32,
     content: []u8, // owned
-    /// `special: true` in tokenizer.json — dropped by `decode(skip_special=true)`.
+    /// `special: true` in tokenizer.json - dropped by `decode(skip_special=true)`.
     /// `false` (e.g. `<think>`) still splits the stream atomically during encode
     /// but is kept when decoding.
     special: bool = true,
@@ -252,7 +252,7 @@ pub const Tokenizer = struct {
                 }
             }
             if (best_rank == std.math.maxInt(u32)) break;
-            // merge pieces[best_at] and pieces[best_at+1] — they are adjacent in `word`
+            // merge pieces[best_at] and pieces[best_at+1] - they are adjacent in `word`
             const a_start = @intFromPtr(pieces.items[best_at].ptr) - @intFromPtr(word.ptr);
             const b_end = @intFromPtr(pieces.items[best_at + 1].ptr) + pieces.items[best_at + 1].len - @intFromPtr(word.ptr);
             pieces.items[best_at] = word[a_start..b_end];

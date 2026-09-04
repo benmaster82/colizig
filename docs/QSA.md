@@ -12,22 +12,22 @@ colibri's `q38_attention`. Weights are BF16-resident; activations f32.
 | indexer: `idx_qheads` / `idx_kheads` / `idx_dim` | 4 / 1 / 128 |
 | `idx_budget` / `idx_ratio` | 2048 / 4 → keep ≤ 512 blocks, `maxSelected` = 2051 |
 
-## Weights (`Layer`) — `layers.i.self_attn.*`
+## Weights (`Layer`) - `layers.i.self_attn.*`
 
 | field | tensor | shape |
 |---|---|---|
-| `q` | `q_proj.weight` | `[q_heads·head_dim·2, hidden]` — **query ‖ output-gate** |
+| `q` | `q_proj.weight` | `[q_heads·head_dim·2, hidden]` - **query ‖ output-gate** |
 | `k` / `v` | `{k,v}_proj.weight` | `[kv_heads·head_dim, hidden]` |
 | `o` | `o_proj.weight` | `[hidden, q_heads·head_dim]` |
 | `q_norm` / `k_norm` | `{q,k}_norm.weight` | `[head_dim]` |
 | `idx_qk` | `indexer.index_qk_proj.weight` | `[(idx_qheads+1)·idx_dim, hidden]` |
 | `idx_qn` / `idx_kn` | `indexer.{q,k}_layernorm.weight` | `[idx_dim]` |
 
-## Context cache (`Cache`) — the big context-dependent consumer
+## Context cache (`Cache`) - the big context-dependent consumer
 
-- `k` — `[kv_heads][cap][head_dim]`, stored **normalized + RoPE'd**
-- `v` — `[kv_heads][cap][head_dim]`, raw
-- `ik` — `[cap][idx_dim]`, raw indexer key (normalized/RoPE'd later, per block)
+- `k` - `[kv_heads][cap][head_dim]`, stored **normalized + RoPE'd**
+- `v` - `[kv_heads][cap][head_dim]`, raw
+- `ik` - `[cap][idx_dim]`, raw indexer key (normalized/RoPE'd later, per block)
 
 Per-token cost `= (2·kv_heads·head_dim + idx_dim)·4` bytes = **54 KiB** on the
 real model (matches `MEMORY_BUDGET.md`). Sized from `--context`. `forward`
@@ -64,4 +64,4 @@ the whole prefix (dense attention).
 
 - Threading over query heads / blocks (Phase 8).
 - Reusing a shared prefix's cached K/V/index rows across prompts (colibri's
-  serve-path prefix slot) — an inference-loop concern, Phase 7+.
+  serve-path prefix slot) - an inference-loop concern, Phase 7+.

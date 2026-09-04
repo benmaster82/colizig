@@ -1,4 +1,4 @@
-//! PLE — hashed n-gram embedding, injected once (at `ple_layer`, index 1).
+//! PLE - hashed n-gram embedding, injected once (at `ple_layer`, index 1).
 //!
 //! Ported from colibri's `q38_hash_row` / `q38_ple_row` / `q38_ple`.  Per token
 //! the bigram/trigram history is hashed to `ngram_heads` row addresses; each row
@@ -8,7 +8,7 @@
 //! dilated causal conv, and returned to be added into the residual.
 //!
 //! Row addresses are a pure function of the token ids, so they are known before
-//! any compute — `prefetchRows` computes and reads them all up front.  The
+//! any compute - `prefetchRows` computes and reads them all up front.  The
 //! bounded async I/O queue is Phase 7; here the table is memory-mapped and a
 //! "read" is a page fault serviced by the OS page cache.
 

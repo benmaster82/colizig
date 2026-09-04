@@ -14,7 +14,7 @@ Ported from colibri's `q38_deltanet`. Weights are BF16-resident; activations f32
 | `conv_dim` | 10240 | `= 2·kheads·kdim + vheads·vdim` (= 4096 + 6144) |
 | `k()` / `v()` | 2048 / 6144 | conv-output block widths: `[q | k | v]` |
 
-## Weights (`Layer`) — `layers.i.linear_attn.*`
+## Weights (`Layer`) - `layers.i.linear_attn.*`
 
 | field | tensor | shape | dtype |
 |---|---|---|---|
@@ -29,10 +29,10 @@ Ported from colibri's `q38_deltanet`. Weights are BF16-resident; activations f32
 BF16 matrices are copied out of the shard mmap into owned, aligned buffers
 (`NativeMatrix`) and multiplied with `matmulBf16` (per-element widen, f32 accum).
 
-## Persistent state (`GdnState`) — allocated once per GDN layer
+## Persistent state (`GdnState`) - allocated once per GDN layer
 
-- `rec` — `[vheads][kdim·vdim]` f32 recurrent state (real: 48·128·128·4 ≈ 3.1 MiB/layer)
-- `ring` — `[conv_dim][convk-1]` f32 causal-conv history
+- `rec` - `[vheads][kdim·vdim]` f32 recurrent state (real: 48·128·128·4 ≈ 3.1 MiB/layer)
+- `ring` - `[conv_dim][convk-1]` f32 causal-conv history
 
 `reset()` zeroes both (new sequence). Never reallocated per token.
 
@@ -44,7 +44,7 @@ BF16 matrices are copied out of the shard mmap into owned, aligned buffers
    `ring[c]` left and store `qkv[c]` at the end.
 3. Split `conv` into `qi[0:k]`, `ki[k:2k]`, `vi[2k:2k+v]`.
 4. Per value head `h`: gather the shared key head `h/rep`, L2-normalize
-   (`Σx² + 1e-6`), scale — `qscale = 1/√Σ · 1/√kdim`, `kscale = 1/√Σ`.
+   (`Σx² + 1e-6`), scale - `qscale = 1/√Σ · 1/√kdim`, `kscale = 1/√Σ`.
 5. **Gated-delta recurrence** per head, state `[kdim, vdim]`:
    - `α = exp(−exp(A_log[h]) · softplus(aa[h] + dt_bias[h]))`, `β = σ(bb[h])`
    - `state *= α`
@@ -68,6 +68,6 @@ BF16 matrices are copied out of the shard mmap into owned, aligned buffers
 ## Threading / batching
 
 The gated-delta recurrence fans over value heads via `parallel.chunks` (Phase 9,
-bit-identical — each head owns its `rec`/`core`/`delta` slice). Not yet: prefill
-row-batching (colibri's bounded 32-row chunks) — the recurrence and conv already
+bit-identical - each head owns its `rec`/`core`/`delta` slice). Not yet: prefill
+row-batching (colibri's bounded 32-row chunks) - the recurrence and conv already
 produce chunk-invariant results, so it is purely a memory/robustness change.

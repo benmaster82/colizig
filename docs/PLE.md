@@ -1,4 +1,4 @@
-# PLE — hashed n-gram embedding (`src/qwen38/ple.zig`)
+# PLE - hashed n-gram embedding (`src/qwen38/ple.zig`)
 
 Injected once, at layer `ple_layer` (index **1**). Adds a large (~51B-parameter)
 associative memory with almost no per-token compute. Ported from colibri's
@@ -18,7 +18,7 @@ associative memory with almost no per-token compute. Ported from colibri's
 Heads `0..7` are **bigram** (hash of `cur, prev`), `8..15` **trigram**
 (`cur, prev, prev2`).
 
-## The table (`Table`) — streamed, never resident
+## The table (`Table`) - streamed, never resident
 
 - Shards `layers.1.ple.ple_embedding.ngram_embedding.shard_<p>.weight`,
   `p = 0..127`, each `[rows_p, 160]` E4M3 (also accepts a single
@@ -28,7 +28,7 @@ Heads `0..7` are **bigram** (hash of `cur, prev`), `8..15` **trigram**
   `layer_multipliers[3]`, `ngram_heads_vocab_sizes[16]`,
   `ngram_heads_offsets[16]`; scalar `ngram_embedding.weight_scale`.
 
-### Address (`hashRow`) — deterministic, no scan
+### Address (`hashRow`) - deterministic, no scan
 
 ```
 x  = u64(cur)·mult[0]  ^  u64(p1)·mult[1]         (all u64, wrapping)
@@ -38,7 +38,7 @@ row = offset[head] + r
 ```
 
 `row → (shard p, local)` follows from `part_start[]`; the byte offset is
-`local · 160` (E4M3) — no table scan, ever. This is why PLE prefetch is
+`local · 160` (E4M3) - no table scan, ever. This is why PLE prefetch is
 *deterministic* while expert prefetch is only predictive.
 
 ### `readRow(row, out[160])`
@@ -63,8 +63,8 @@ Locate the shard, decode `160` E4M3 bytes × `weight_scale` (or read F32).
 
 ## State (`State`)
 
-- `ring` — `hc_width · stateLen` f32 causal-conv history
-- `history[2]` + `history_len` — the bigram/trigram window
+- `ring` - `hc_width · stateLen` f32 causal-conv history
+- `history[2]` + `history_len` - the bigram/trigram window
 
 `reset()` for a new sequence.
 
@@ -72,7 +72,7 @@ Locate the shard, decode `160` E4M3 bytes × `weight_scale` (or read F32).
 
 Computes every row address for a chunk of tokens (history simulated, not
 mutated) and reads all `S · 16` rows up front. `forward(..., prefetch)` then
-consumes that buffer. Result is **bit-identical** to inline reads — verified in
+consumes that buffer. Result is **bit-identical** to inline reads - verified in
 tests and `selftest`. The bounded async I/O queue that would overlap these reads
 with the two preceding layers' compute is Phase 7.
 

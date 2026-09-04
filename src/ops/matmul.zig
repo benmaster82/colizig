@@ -50,7 +50,7 @@ pub fn matmulBf16(y: []f32, x: []const f32, w: []const u16, S: usize, I: usize, 
 // The dot products run four independent `@mulAdd` (FMA) accumulator chains so the
 // ~4-cycle FMA latency is hidden by throughput (one serial `acc += va*vb` chain
 // stalls at ~1 FMA / 4 cycles).  `@mulAdd` contracts mul+add into a single
-// fused instruction — this is also what colibri's `gcc -O3 -march=native` auto-
+// fused instruction - this is also what colibri's `gcc -O3 -march=native` auto-
 // vectoriser emits (`-ffp-contract=fast` is on by default), so the result stays
 // numerically aligned with the C reference.  All the model's inner widths
 // (2560, 640, 256, 128, vocab) are multiples of `unroll*lanes`, so the fast loop
@@ -90,7 +90,7 @@ pub fn dotBf16(a: []const f32, b: []const u16) f32 {
     while (i + unroll * lanes <= n) : (i += unroll * lanes) {
         inline for (0..unroll) |k| {
             const va: V = a[i + k * lanes ..][0..lanes].*;
-            // bf16 is the top 16 bits of an f32 — widen the whole lane and shift.
+            // bf16 is the top 16 bits of an f32 - widen the whole lane and shift.
             const raw: Vu16 = b[i + k * lanes ..][0..lanes].*;
             const wide: V = @bitCast(@as(Vu32, raw) << sh);
             acc[k] = @mulAdd(V, va, wide, acc[k]);

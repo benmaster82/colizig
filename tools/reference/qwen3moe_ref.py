@@ -3,7 +3,7 @@
 
 A second implementation of the same math `src/qwen3moe/` ports, written loopy so
 a structural bug on either side shows up as a logit mismatch. Not the upstream
-`Qwen3MoeForCausalLM` — validates the Zig engine against an independent port of
+`Qwen3MoeForCausalLM` - validates the Zig engine against an independent port of
 the same spec. Reads a checkpoint dir (config.json + model.safetensors).
 
 Shares the E4M3 decode, the block-FP8 matmul and RoPE with qwen38_ref.py.
@@ -18,7 +18,7 @@ from qwen38_ref import e4m3_decode, fp8_block_matmul, load_safetensors, rope, si
 
 
 def rms(x, w, eps):
-    """Plain RMSNorm (scale = w, not 1 + w) — Qwen2/Qwen3."""
+    """Plain RMSNorm (scale = w, not 1 + w) - Qwen2/Qwen3."""
     mean = np.float32(np.mean(x.astype(np.float64) ** 2))
     r = np.float32(1.0 / math.sqrt(mean + eps))
     return (x * r * w).astype(np.float32)

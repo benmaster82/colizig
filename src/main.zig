@@ -1,9 +1,9 @@
-//! colizig — experimental Zig inference engine for Qwen3.8-Flash-Next.
+//! colizig - experimental Zig inference engine for Qwen3.8-Flash-Next.
 //!
 //! Phase 1 scope: metadata only. `inspect` reads config.json + the safetensors
 //! index and reports the architecture and a memory-budget plan WITHOUT loading
 //! any weights. `chat` / `benchmark` / `stress` are declared but explicitly
-//! unimplemented — they fail loudly rather than fake a result (brief §29).
+//! unimplemented - they fail loudly rather than fake a result (brief §29).
 
 const std = @import("std");
 const args_mod = @import("cli/args.zig");
@@ -16,7 +16,7 @@ const stress_mod = @import("cli/stress.zig");
 const tokenize_mod = @import("cli/tokenize.zig");
 
 const usage =
-    \\colizig — experimental memory-streaming Zig inference engine for Qwen MoE models
+    \\colizig - experimental memory-streaming Zig inference engine for Qwen MoE models
     \\           (Qwen3.8-Flash-Next / Qwen4-Exp, and Qwen3-MoE e.g. Qwen3-30B-A3B)
     \\
     \\usage:

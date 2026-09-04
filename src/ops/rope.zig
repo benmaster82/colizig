@@ -1,4 +1,4 @@
-//! Rotary position embedding — NeoX split-half form, matching colibri's
+//! Rotary position embedding - NeoX split-half form, matching colibri's
 //! `q38_rope`.  Only the first `rotary_dim` lanes of a head are rotated
 //! (partial rotary factor); the rest pass through.
 //!

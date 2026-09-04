@@ -1,4 +1,4 @@
-# Tensor map — name → (category, layer, expert)
+# Tensor map - name → (category, layer, expert)
 
 `src/model/manifest.zig : classify()` turns a safetensors tensor name into a
 `Class { category, layer?, expert? }`. Rules, in order:
@@ -37,7 +37,7 @@ standalone text export (`model.*`). The detected prefix is reported by
 Routed experts may be per-expert block-FP8 matrices
 (`…experts.<E>.{gate,up,down}_proj.weight` + `…weight_scale_inv`) or the fused
 BF16 3-D tensors `…experts.gate_up_proj` / `…experts.down_proj` emitted by the
-upstream text class — both classify as `moe_expert`.
+upstream text class - both classify as `moe_expert`.
 
 ## Category → residency
 
@@ -46,10 +46,10 @@ See `MEMORY_MODEL.md`. Summary: `moe_expert` → streamable, `ple_table` → col
 
 ## Deterministic vs dynamic addressing
 
-- **deterministic-address**: every resident and streamable tensor — its byte
+- **deterministic-address**: every resident and streamable tensor - its byte
   offset is fixed in the shard, recorded in `TensorLocation.offset` at manifest
   time.
-- **dynamically-addressed**: PLE table rows — the row index is
+- **dynamically-addressed**: PLE table rows - the row index is
   `head_offset[h] + (hash(cur, p1[, p2]) mod head_vocab[h])`, computed per token
   (`q38_hash_row`); the containing shard and local offset follow from the
   cumulative shard row counts (`split_ngram_parts = 128`), still without scanning.

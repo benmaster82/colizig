@@ -1,4 +1,4 @@
-//! `chat` — ColiZig: ChatML chat over the real tokenizer + forward.
+//! `chat` - ColiZig: ChatML chat over the real tokenizer + forward.
 //!
 //!   * `--prompt "..."`  → one-shot: render, prefill, stream the reply, print.
 //!   * no `--prompt`     → interactive multi-turn REPL: a header with the ColiZig
@@ -7,7 +7,7 @@
 //!     reply.  KV state + the warm expert cache carry across turns; `/reset`
 //!     clears the conversation, `/think` toggles reasoning, `/exit` quits.
 //!
-//! One code path for **both** model families — `runGeneric` / `Session` are
+//! One code path for **both** model families - `runGeneric` / `Session` are
 //! generic over the model module (`qwen38/model.zig` or `qwen3moe/model.zig`),
 //! dispatched on `cfg.arch`.
 
@@ -29,7 +29,7 @@ const sampler_mod = @import("../runtime/sampler.zig");
 const Timestamp = std.Io.Timestamp;
 
 /// Palette: Qwen's violet for the assistant, Zig's amber for the user, grey for
-/// reasoning.  Truecolour SGR — every modern terminal handles it.
+/// reasoning.  Truecolour SGR - every modern terminal handles it.
 const C = struct {
     const rst = "\x1b[0m";
     const b = "\x1b[1m";
@@ -59,11 +59,11 @@ const sprite = [_][]const u8{
 
 fn pixel(ch: u8) ?[3]u8 {
     return switch (ch) {
-        'M' => .{ 173, 150, 255 }, // crest  — light Qwen violet
-        'T' => .{ 120, 90, 235 }, //  body   — Qwen violet
-        'C', 'w' => .{ 247, 164, 29 }, // wing/tail — Zig amber
-        'O' => .{ 255, 190, 70 }, //  beak   — bright amber
-        'e' => .{ 235, 235, 245 }, // eye    — near-white
+        'M' => .{ 173, 150, 255 }, // crest  - light Qwen violet
+        'T' => .{ 120, 90, 235 }, //  body   - Qwen violet
+        'C', 'w' => .{ 247, 164, 29 }, // wing/tail - Zig amber
+        'O' => .{ 255, 190, 70 }, //  beak   - bright amber
+        'e' => .{ 235, 235, 245 }, // eye    - near-white
         else => null,
     };
 }
@@ -163,7 +163,7 @@ const Styler = struct {
 };
 
 /// Everything the decode loop needs, assembled once and reused every turn.
-/// Generic over the model module (`qwen38/model.zig` or `qwen3moe/model.zig`) —
+/// Generic over the model module (`qwen38/model.zig` or `qwen3moe/model.zig`) -
 /// both expose the same `Model` / `State` / `Scratch` / `forward` / `Opts` shape,
 /// so the whole ColiZig REPL is one code path for both model families.
 fn Session(comptime Mdl: type) type {
@@ -318,7 +318,7 @@ fn runGeneric(
     var sc = try Mdl.Scratch.init(gpa, &model, prefill_chunk, context);
     defer sc.deinit();
 
-    // learned expert priors — load, warm the caches, save (merged) on exit
+    // learned expert priors - load, warm the caches, save (merged) on exit
     const ul: u32 = @intCast(m.cfg.layers);
     const ue: u32 = @intCast(m.cfg.experts);
     var usage: ?Mdl.ExpertUsage = if (opts.no_usage) null else (usage_mod.ExpertUsage.load(gpa, io, dir, ul, ue) orelse (Mdl.ExpertUsage.init(gpa, ul, ue) catch null));
@@ -492,7 +492,7 @@ fn repl(
         }
 
         // ChatML fragment for this turn.  The previous assistant turn is in the
-        // KV cache but its closing <|im_end|> is not — emit it here first.
+        // KV cache but its closing <|im_end|> is not - emit it here first.
         frag.clearRetainingCapacity();
         if (turn == 0) {
             if (opts.system.len != 0)
@@ -512,14 +512,14 @@ fn repl(
         defer gpa.free(ids);
 
         if (sess.state.pos + ids.len + 1 > sess.context) {
-            try out.print("  " ++ C.dim ++ "(context full: {d}/{d} — /reset)" ++ C.rst ++ "\n", .{ sess.state.pos, sess.context });
+            try out.print("  " ++ C.dim ++ "(context full: {d}/{d} - /reset)" ++ C.rst ++ "\n", .{ sess.state.pos, sess.context });
             continue;
         }
 
         const pf0 = Timestamp.now(io, .awake);
         sess.prefill(ids) catch |e| switch (e) {
             error.ContextExhausted, error.TooManyTokens => {
-                try out.writeAll("  " ++ C.dim ++ "(turn too long for the context — /reset)" ++ C.rst ++ "\n");
+                try out.writeAll("  " ++ C.dim ++ "(turn too long for the context - /reset)" ++ C.rst ++ "\n");
                 continue;
             },
             else => return e,

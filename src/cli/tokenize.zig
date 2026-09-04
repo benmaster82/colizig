@@ -1,4 +1,4 @@
-//! `tokenize` — load a checkpoint's `tokenizer.json` and encode/decode text.
+//! `tokenize` - load a checkpoint's `tokenizer.json` and encode/decode text.
 //! Works from just the tokenizer file (no weights needed).
 
 const std = @import("std");

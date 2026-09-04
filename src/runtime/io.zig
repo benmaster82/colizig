@@ -1,4 +1,4 @@
-//! Unified I/O scheduler (brief §13) — a bounded, typed, priority work queue.
+//! Unified I/O scheduler (brief §13) - a bounded, typed, priority work queue.
 //!
 //! Requests name a `ResourceKey` and carry a `Priority`.  `next()` always
 //! returns the highest-priority pending request (HIGH before MEDIUM before LOW,
@@ -10,7 +10,7 @@
 //! (model.forward) pops keys and performs the read.  PLE row reads additionally
 //! fan out concurrently through `std.Io.Group` (see `ple.prefetchRowsAsync`);
 //! true compute/IO overlap for experts needs the evented Io backend and a real
-//! slow-disk checkpoint to matter — see docs/IO_SCHEDULER.md.
+//! slow-disk checkpoint to matter - see docs/IO_SCHEDULER.md.
 
 const std = @import("std");
 

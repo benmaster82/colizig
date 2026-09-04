@@ -98,7 +98,7 @@ pub const ExpertUsage = struct {
     }
 
     /// Merge `self` into `<dir>/.colizig_usage` (load existing totals, add,
-    /// rewrite).  Best-effort — silently does nothing on any I/O error.
+    /// rewrite).  Best-effort - silently does nothing on any I/O error.
     pub fn save(self: *const ExpertUsage, io: std.Io, dir: std.Io.Dir) void {
         const gpa = self.allocator;
 

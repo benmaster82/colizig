@@ -26,20 +26,20 @@ ends with: build ✅ · test ✅ · benchmark (once kernels exist) · document.
 | **4** | MoE forward: router → top-10 → expert load → GEMM → weighted accumulate; block-FP8 dequant; bounded per-layer expert LRU with stats | **done** |
 | **5** | PLE / hashed n-gram: token history → hash → address → table lookup; `split_ngram_parts` partitioning; deterministic prefetch | **done** |
 | **6** | Qwen Sparse Attention: indexer → micro-block pooling → block ranking → top-k → full attention over selected tokens; context KV cache | **done** |
-| **7a** | Gated residual (`hyper_connection_mixer`); **end-to-end forward** (embed → 48 layers → final mixer → LM head), PLE inject at layer 1; `Model`/`State`/`Scratch`; `forward` CLI on raw token ids + greedy decode | **done — awaiting approval** |
-| **7b** | Bounded typed priority `Scheduler` (no speculative starvation); `LastTokenPredictor`; concurrent PLE row reads (`std.Io.Group`); predictive expert prefetch wired into `forward`; prefetch-hit / demand-load / accuracy telemetry | **done — awaiting approval** |
-| **8a** | Byte-level BPE tokenizer (`tokenizer.json`), ChatML template, `chat` CLI (one-shot: template → encode → forward → greedy decode → detokenize) | **done — awaiting approval** |
-| **8b** | Independent NumPy reference forward + oracle test — cross-validates the whole Zig forward against a second port of the spec | **done — awaiting approval** |
-| **8c** | `benchmark` (§23 runtime report: tok/s, TTFT, per-phase timers, `compute_stall_due_to_io`) and `stress` (§26 RAM-budget sweep); `Timers` + tracked-bytes `Meter` | **done — awaiting approval** |
-| **9** | Threaded kernels — `runtime/parallel.zig` fans the matmul output-row loop and the GDN recurrent head loop over `std.Io.Group` workers, gated by a work threshold (toy models stay serial). `--threads` flag | **done — awaiting approval** |
+| **7a** | Gated residual (`hyper_connection_mixer`); **end-to-end forward** (embed → 48 layers → final mixer → LM head), PLE inject at layer 1; `Model`/`State`/`Scratch`; `forward` CLI on raw token ids + greedy decode | **done - awaiting approval** |
+| **7b** | Bounded typed priority `Scheduler` (no speculative starvation); `LastTokenPredictor`; concurrent PLE row reads (`std.Io.Group`); predictive expert prefetch wired into `forward`; prefetch-hit / demand-load / accuracy telemetry | **done - awaiting approval** |
+| **8a** | Byte-level BPE tokenizer (`tokenizer.json`), ChatML template, `chat` CLI (one-shot: template → encode → forward → greedy decode → detokenize) | **done - awaiting approval** |
+| **8b** | Independent NumPy reference forward + oracle test - cross-validates the whole Zig forward against a second port of the spec | **done - awaiting approval** |
+| **8c** | `benchmark` (§23 runtime report: tok/s, TTFT, per-phase timers, `compute_stall_due_to_io`) and `stress` (§26 RAM-budget sweep); `Timers` + tracked-bytes `Meter` | **done - awaiting approval** |
+| **9** | Threaded kernels - `runtime/parallel.zig` fans the matmul output-row loop and the GDN recurrent head loop over `std.Io.Group` workers, gated by a work threshold (toy models stay serial). `--threads` flag | **done - awaiting approval** |
 | 9b | MoE per-expert threading (decode path fans the top-k SwiGLU evals) | **done** |
-| — | AVX2 / FMA kernel pass (`dotF32`/`dotBf16` 4× `@mulAdd`; fused `dotFp8Row` for S==1) | **done** |
-| MTP | Speculative decode via the checkpoint's MTP head | **investigated, declined** — see below |
+| - | AVX2 / FMA kernel pass (`dotF32`/`dotBf16` 4× `@mulAdd`; fused `dotFp8Row` for S==1) | **done** |
+| MTP | Speculative decode via the checkpoint's MTP head | **investigated, declined** - see below |
 | **10a** | CUDA backend plumbing + the block-FP8 matmul on the GPU (`--cuda`), bit-identical | **done** |
-| **10b** | bounded VRAM LRU cache of resident expert weights (`--vram`) | **done — no speedup on 4 GB** |
+| **10b** | bounded VRAM LRU cache of resident expert weights (`--vram`) | **done - no speedup on 4 GB** |
 | 10c | pinned staging + async streams + batched multi-expert kernels | *open, uncertain on a Max-Q* |
-| **11** | Qwen3-MoE support (Qwen3-30B-A3B) — plain GQA + QK-norm, no PLE/GDN/shared expert | **done — runs the real FP8 checkpoint end-to-end** |
-| **12** | `serve` — OpenAI-compatible HTTP API (`/v1/chat/completions`, SSE), both model families | **done** |
+| **11** | Qwen3-MoE support (Qwen3-30B-A3B) - plain GQA + QK-norm, no PLE/GDN/shared expert | **done - runs the real FP8 checkpoint end-to-end** |
+| **12** | `serve` - OpenAI-compatible HTTP API (`/v1/chat/completions`, SSE), both model families | **done** |
 
 ## Phase 1 deliverables
 
@@ -67,11 +67,11 @@ src/ops/softmax.zig               stable softmax
 src/ops/activation.zig            sigmoid / silu / softplus / geluTanh
 src/model/tensors.zig             View + decodeInto (F32/F16/BF16); e4m3ToF32 helper; FP8 errors clearly
 src/model/weights.zig             Weights: mmap each shard whole (buffer fallback); view/materialize; embed(); lmHead()
-src/cli/selftest.zig              `selftest [MODEL_DIR]` — ops self-consistency + weight-materialization checks
+src/cli/selftest.zig              `selftest [MODEL_DIR]` - ops self-consistency + weight-materialization checks
 tools/gen_tiny_fixture.zig        now writes deterministic non-zero F32/BF16 bodies
 ```
 
-`selftest` is a bring-up diagnostic, **not** an inference run — the transformer
+`selftest` is a bring-up diagnostic, **not** an inference run - the transformer
 layers do not exist yet. FP8 decoding (routed experts, PLE table) is deliberately
 an error in `tensors.zig` until Phase 4 / 5 supply the block/scalar scales.
 
@@ -81,7 +81,7 @@ an error in `tensors.zig` until Phase 4 / 5 supply the block/scalar scales.
 src/model/tensors.zig    + NativeMatrix (resident BF16/F32 weight matrix, mmap→owned, matmul)
 src/model/weights.zig    + matrixBySuffix / vectorBySuffix / materializeView helpers
 src/qwen38/gdn.zig        Dims, GdnState (persistent rec + conv ring), Layer (weights),
-                          Scratch, forward()  — port of colibri q38_deltanet
+                          Scratch, forward()  - port of colibri q38_deltanet
 src/cli/selftest.zig     + GDN checks (finite, chunk-boundary invariance, zero-input→zero)
 ```
 
@@ -96,7 +96,7 @@ src/ops/fp8.zig          e4m3ToF32, matmulFp8 (128×128 block-scaled), nblk; dem
 src/model/tensors.zig    e4m3ToF32 re-exported from ops/fp8
 src/qwen38/moe.zig        Dims, Fp8Matrix, Expert, ExpertCache (bounded LRU + CacheStats),
                           Layer (router + shared expert, resident), Scratch, forward()
-                          — port of colibri q38_moe_decode
+                          - port of colibri q38_moe_decode
 src/cli/selftest.zig     + MoE checks (finite, routes topk, warm-replay all hits,
                           tight cache evicts) and FP8 numeric check via ops tests
 tools/gen_tiny_fixture.zig  FP8 expert bytes = exact small values; positive block scales
@@ -105,7 +105,7 @@ tools/gen_tiny_fixture.zig  FP8 expert bytes = exact small values; positive bloc
 Targets the **per-expert block-FP8** layout of `Qwen3.8-Flash-Next-FP8`
 (`experts.<e>.{gate,up,down}_proj.weight` + `_scale_inv`).  The fused BF16
 alternative from the upstream text class is not wired.  Prefill still runs the
-per-token decode path — expert-major grouping is a Phase 8 throughput change that
+per-token decode path - expert-major grouping is a Phase 8 throughput change that
 does not affect results.  See `docs/MOE.md`.
 
 ## Phase 5 deliverables
@@ -115,7 +115,7 @@ src/qwen38/ple.zig        Dims, Table (streamed n-gram table: hashRow + readRow,
                           shard-partitioned addressing, no scan), State (conv ring
                           + bigram/trigram history), Layer (key/value proj + norms
                           + conv, resident), Scratch, prefetchRows(), forward()
-                          — port of colibri q38_hash_row / q38_ple_row / q38_ple
+                          - port of colibri q38_hash_row / q38_ple_row / q38_ple
 src/cli/selftest.zig     + PLE checks (addresses in range, prefetch bit-identical,
                           chunk-invariant, finite)
 tools/gen_tiny_fixture.zig  + Builder.addRaw for the i64 hash-parameter tensors
@@ -133,7 +133,7 @@ See `docs/PLE.md`.
 src/qwen38/qsa.zig        Dims, Cache (K normalized+RoPE'd / V raw / indexer key,
                           context-sized), Layer (q/k/v/o + q/k norm + indexer
                           qk-proj + indexer norms, resident), Scratch, forward()
-                          — port of colibri q38_attention
+                          - port of colibri q38_attention
 src/cli/selftest.zig     + QSA checks (finite; prefill == chunked-decode via the
                           KV cache; deterministic)
 ```
@@ -147,18 +147,18 @@ in-order growth (`cache.len == pos_base`).  Block scoring uses `std.sort.pdq`
 
 ```
 src/qwen38/residual.zig  Dims, Gated (norm + down/up + optional inject), Scratch,
-                         read() / apply()  — port of colibri q38_gr_read/q38_gr_apply
+                         read() / apply()  - port of colibri q38_gr_read/q38_gr_apply
 src/qwen38/model.zig      Model (all per-layer resident weights + PLE table),
                          State (per-layer GDN/QSA/expert-cache + PLE + pos),
-                         Scratch, forward(), generateGreedy()  — port of `step`
-src/cli/forward.zig      `forward <dir> --tokens <csv> [--steps N]` — runs the full
+                         Scratch, forward(), generateGreedy()  - port of `step`
+src/cli/forward.zig      `forward <dir> --tokens <csv> [--steps N]` - runs the full
                          forward on raw token ids, prints top-8 logits + greedy decode
 src/cli/args.zig         + --tokens / --steps
 src/main.zig             + `forward` command; `chat`/`benchmark`/`stress` message
                          now points at `forward` and cites the missing tokenizer
 ```
 
-Still **synchronous** — a cache miss loads the expert inline. No tokenizer:
+Still **synchronous** - a cache miss loads the expert inline. No tokenizer:
 ids in, ids out. `forward` validates every token id against the vocabulary and
 sizes the context / expert-cache from the Phase 1 memory plan.
 
@@ -172,7 +172,7 @@ greedy decode stays in vocabulary and stops at EOS. See `docs/FORWARD.md`.
 src/runtime/io.zig       ResourceKey/Priority, Scheduler (bounded, dedup+upgrade,
                          strict-priority `next`, cancel), Stats
 src/runtime/predict.zig  PrefetchPrediction, LastTokenPredictor (per-layer, tracks accuracy)
-src/qwen38/ple.zig       + prefetchRowsAsync — S·ngram_heads row reads fan out via std.Io.Group
+src/qwen38/ple.zig       + prefetchRowsAsync - S·ngram_heads row reads fan out via std.Io.Group
 src/qwen38/moe.zig       + ExpertCache.prefetch + Slot.prefetched flag;
                          CacheStats gains prefetch_hits/prefetch_wasted/demand_loads/prefetch_loads;
                          moe.forward reports the last token's routed experts
@@ -184,7 +184,7 @@ src/cli/args.zig         + --expert-cap (force a small cache to exercise the sch
 ```
 
 **Concurrency reality**: PLE row reads are genuinely concurrent (`std.Io.Group`
-fan-out).  Expert prefetch executes *cooperatively* on the compute thread — the
+fan-out).  Expert prefetch executes *cooperatively* on the compute thread - the
 bounded priority queue, dedup, no-starvation policy and the prefetch-hit /
 `compute_stall_due_to_io` (= demand-load count) telemetry are all real, but true
 compute/IO overlap for experts needs the evented `Io` backend and a real
@@ -210,47 +210,47 @@ src/main.zig                 `chat` is a real command; only `benchmark`/`stress`
 ```
 
 The pre-tokenizer is exact for ASCII and treats most non-ASCII codepoints as
-letters — word boundaries in exotic scripts may differ from HF `tokenizers`.
+letters - word boundaries in exotic scripts may differ from HF `tokenizers`.
 `chat` is single-turn (`--prompt`); the harness runs non-interactively so a REPL
 comes later. See `docs/TOKENIZER.md`.
 
 ## Phase 8b deliverables
 
 ```
-tools/reference/qwen38_ref.py    NumPy forward — a second, dense/loopy port of the
+tools/reference/qwen38_ref.py    NumPy forward - a second, dense/loopy port of the
                                  same colibri-derived spec (all 5 subsystems)
 tools/reference/build_oracle.py  reads the Zig-generated fixture, writes
                                  test/fixtures/tiny/oracle.json (3 token sets)
 tools/reference/requirements.txt numpy only (no torch / transformers)
 build.zig                        + `zig build oracle` step (needs python)
-src/qwen38/model.zig             + test "matches the NumPy reference oracle" —
+src/qwen38/model.zig             + test "matches the NumPy reference oracle" -
                                  skipped when oracle.json is absent
 ```
 
 Both implementations read the **same** fixture weights; agreement (< 2e-2 max
 abs on the final logits, argmax exact) is strong evidence that both are faithful
 to the spec.  This is *not* validation against the released `Qwen4ExpForCausalLM`
-weights/outputs — that needs the checkpoint + `transformers` and remains a
+weights/outputs - that needs the checkpoint + `transformers` and remains a
 further step.  See `docs/REFERENCE.md`.
 
 ## Phase 8c deliverables
 
 ```
-src/runtime/timers.zig   Timers — per-phase (embed / gated_residual / deltanet /
+src/runtime/timers.zig   Timers - per-phase (embed / gated_residual / deltanet /
                          qsa / moe / ple / lm_head) wall-clock via std.Io.Timestamp
-src/runtime/meter.zig    Meter — pass-through allocator tracking current + peak bytes
+src/runtime/meter.zig    Meter - pass-through allocator tracking current + peak bytes
 src/qwen38/model.zig     Opts + timers; State.init(+ io) times demand expert loads
                          (ExpertCache.stats.demand_ns = compute_stall_due_to_io)
 src/cli/benchmark.zig    `benchmark <dir> [--prompt-len N] [--steps N] [--expert-cap K]`
-                         — the brief §23 "=== QWEN38 RUNTIME ===" report
+                         - the brief §23 "=== QWEN38 RUNTIME ===" report
 src/cli/stress.zig       `stress <dir> [--context N] [--steps N] [--ram-limit G]`
-                         — sweep RAM budgets, check tracked peak ≤ limit (brief §26)
+                         - sweep RAM budgets, check tracked peak ≤ limit (brief §26)
 src/cli/args.zig         + --prompt-len
 ```
 
 All of the brief's CLI is now real (`inspect`, `chat`, `benchmark`, `stress`,
 plus `forward` / `selftest`).  `Meter` tracks *our* allocations, not process RSS
-— an honest proxy that lines up with the memory-model accounting.  See
+- an honest proxy that lines up with the memory-model accounting.  See
 `docs/BENCHMARK.md`.
 
 ## Real-checkpoint validation (metadata, 2026-09)
@@ -263,9 +263,9 @@ The ~5 MB of metadata (`config.json`, `model.safetensors.index.json`,
 src/model/manifest.zig   metadata-only fallback: when the shard files are absent
                          but the index is present, build the manifest from the
                          weight_map alone (names + categories, no shapes)
-src/runtime/budget.zig   estimateResidentBytes(cfg) — config-derived BF16 dense size
+src/runtime/budget.zig   estimateResidentBytes(cfg) - config-derived BF16 dense size
 src/cli/inspect.zig      handles the metadata-only manifest
-src/cli/tokenize.zig     `tokenize <dir> --prompt "..."` — encode/decode via
+src/cli/tokenize.zig     `tokenize <dir> --prompt "..."` - encode/decode via
                          the checkpoint's real tokenizer.json (no weights)
 ```
 
@@ -284,17 +284,17 @@ src/runtime/parallel.zig  process-wide switch + `chunks(n, work, ctx, body)`:
 src/ops/matmul.zig        matmul / matmulBf16 fan the output-row loop
 src/ops/fp8.zig           matmulFp8 fans the output-row loop
 src/qwen38/gdn.zig        the gated-delta recurrent head loop fans over value heads
-                          (per-head state / delta / core slices — disjoint)
+                          (per-head state / delta / core slices - disjoint)
 src/cli/{forward,chat,benchmark,stress}.zig  `parallel.enable(io, opts.threads)`
 src/cli/args.zig          + --threads (0 = auto / CPU count, 1 = single-threaded)
 ```
 
 Each fanned task writes a **disjoint** slice, so the result is **bit-identical**
-to the serial path — verified (`matmul` large-shape threaded == serial; the whole
+to the serial path - verified (`matmul` large-shape threaded == serial; the whole
 `forward` threaded == serial).  The work threshold means the toy fixture never
 actually threads (its matmuls are ~2 Ki ops), so `--threads 0` does no harm
 there; the real model's projections (≥ 1.6 M MACs each) and expert GEMMs do fan
-out.  The wall-clock benefit can only be shown on the real checkpoint — on this
+out.  The wall-clock benefit can only be shown on the real checkpoint - on this
 machine the very first (un-thresholded) attempt was ~24× *slower* on the fixture
 purely from `Io.Group` coordination overhead, which is exactly what the threshold
 now avoids.  See `docs/THREADING.md`.
@@ -302,7 +302,7 @@ now avoids.  See `docs/THREADING.md`.
 ## Phase 9b deliverables
 
 ```
-src/runtime/parallel.zig  threadlocal `in_worker` — a `chunks` call from inside a
+src/runtime/parallel.zig  threadlocal `in_worker` - a `chunks` call from inside a
                           worker runs serial (so the MoE expert fan-out does not
                           spawn a nested per-matmul fan-out over the same pool)
 src/qwen38/moe.zig        forwardDense (S==1 decode, cap >= topk): pull the top-k
@@ -318,11 +318,11 @@ Coarser tasks than Phase 9 (one per expert, not one per matmul-row-block), so
 less `std.Io.Group` coordination for the same work. Warm-cache decode benchmark
 `--threads 1` vs `12`: MoE 9292 → 1433 ms/forward (6.5×), deltanet 4.3×, decode
 0.060 → 0.339 tok/s. `forward` token output verified **bit-identical** to serial
-and to colibri. The gain only shows warm — a cold run's first forwards fault
+and to colibri. The gain only shows warm - a cold run's first forwards fault
 ~2.3 GB of expert weights off SSD, masking the compute speedup. See
 `docs/BENCHMARK.md`.
 
-Not pursued: QSA per-head threading (~94 ms/forward warm — noise next to MoE's
+Not pursued: QSA per-head threading (~94 ms/forward warm - noise next to MoE's
 1.4 s, and needs per-head score/softmax scratch to avoid races) and prefill
 row-chunking (results-invariant robustness only).
 
@@ -332,11 +332,11 @@ row-chunking (results-invariant robustness only).
 f32/bf16 dot, micro-benchmarked); `ops/fp8.zig` → fused `dotFp8Row` for the
 `S == 1` decode path (no f32 weight-row buffer). `zig build` already targets the
 native CPU (AVX2+FMA). Greedy output token-for-token unchanged. **End-to-end only
-+3 %** — the 12-thread MoE decode is memory-bandwidth-bound (~1 GB experts/token
++3 %** - the 12-thread MoE decode is memory-bandwidth-bound (~1 GB experts/token
 over a ~40 GB/s bus), not FLOP-bound. CPU compute levers are now exhausted; the
 GPU backend (Phase 10, deferred) is the remaining one. See `docs/BENCHMARK.md`.
 
-### MTP speculative decode — investigated, declined (2026-09-04)
+### MTP speculative decode - investigated, declined (2026-09-04)
 
 The checkpoint's MTP head (`mtp.*`, `mtp_num_hidden_layers: 1`,
 `mtp_use_hidden_state_from_layer: null` → last layer, `layer_types: ["full_attention"]`)
@@ -349,7 +349,7 @@ main `embed_tokens`, `norm`, `lm_head` (`mtp_use_dedicated_embeddings: false`,
 A single MTP forward ≈ 0.15× a main forward (≈10 expert reads vs ≈480). With
 draft depth 1 and a realistic 70–85 % greedy acceptance the speculative loop
 (1 main verify pass at S=2 + 1 MTP forward per round) yields ≈ **1.3–1.5×**
-decode — a whole phase (`mtp.zig`, `speculative.zig`, a second expert cache,
+decode - a whole phase (`mtp.zig`, `speculative.zig`, a second expert cache,
 manifest/budget/fixture changes) for a moderate, memory-bound-limited gain.
 Not worth it ahead of the GPU backend; revisit if/when a GPU path exists (MTP
 verification batches well on a GPU).
@@ -369,7 +369,7 @@ build_cuda.ps1                     wrapper that imports the MSVC env first
 `--cuda` greedy decode on the real checkpoint is **token-for-token identical** to
 CPU and colibri. Hardware: NVIDIA Quadro T1000 Max-Q (4 GB, sm_75), CUDA 13.0.
 See `docs/GPU.md`. The one non-obvious fix: the CUDA runtime sets the host
-thread's SSE flush-to-zero mode, corrupting every subsequent CPU float op —
+thread's SSE flush-to-zero mode, corrupting every subsequent CPU float op -
 each ABI call now saves/restores MXCSR.
 
 **10b** adds `--vram <size>`: a bounded LRU cache of resident expert weights in
@@ -381,10 +381,10 @@ stays **~2× slower than the warm CPU** (0.35 vs 0.75 tok/s). The MoE-in-VRAM
 approach needs an 8 GB+ card to reach a hit rate that pays. 10c (pinned staging,
 async streams, batched kernels) or a dense-weights-in-VRAM pivot are the
 remaining options; on a 35 W Max-Q neither is clearly worth it. The backend is
-kept — correct, opt-in, and useful on better hardware. Figures in
+kept - correct, opt-in, and useful on better hardware. Figures in
 `docs/BENCHMARK.md` / `docs/GPU.md`.
 
-## Phase 11 — Qwen3-MoE (Qwen3-30B-A3B)
+## Phase 11 - Qwen3-MoE (Qwen3-30B-A3B)
 
 A second model family behind `model_type: "qwen3_moe"`. Reuses the FP8 kernels,
 expert cache + streaming, CUDA backend, tokenizer, sampler and the MoE forward;
@@ -395,7 +395,7 @@ hyper-connections or shared expert.
 ```
 src/model/config.zig      + Arch enum; parseQwen3Moe / validateQwen3Moe
 src/model/manifest.zig     (classifier already covered the qwen3_moe names)
-src/ops/rmsnorm.zig        + rms() — plain (scale = w, not 1+w)
+src/ops/rmsnorm.zig        + rms() - plain (scale = w, not 1+w)
 src/qwen38/moe.zig         Layer.load + addSharedExpert now optional (shared_inter == 0)
 src/qwen3moe/attn.zig      GQA causal attention: q/k/v/o FP8, QK-norm, RoPE, KV cache
 src/qwen3moe/model.zig     Model / State / Scratch / forward / generateGreedy
@@ -405,7 +405,7 @@ src/cli/inspect.zig        arch-aware report
 
 Verified end-to-end on the real `Qwen/Qwen3-30B-A3B-FP8` (30.2 GB, 7 shards):
 config parses, all 37,491 tensors classify (0 unknown), and both `forward` and
-`chat` produce correct output —
+`chat` produce correct output -
 
 ```
 forward "The capital of France is"  → " Paris. The capital of the United
@@ -413,7 +413,7 @@ forward "The capital of France is"  → " Paris. The capital of the United
 chat    "what is a black hole?"     → coherent Qwen3-Thinking reasoning
 ```
 
-**~3.2 tok/s CPU decode** (12 threads, cap 128) — ~4× the Qwen3.8-Flash-Next
+**~3.2 tok/s CPU decode** (12 threads, cap 128) - ~4× the Qwen3.8-Flash-Next
 rate, since the model is 30 B / 128 experts vs 176 B / 512. `--cuda` is
 bit-identical but still ~4× slower (same 4 GB-VRAM ceiling as Phase 10).
 
@@ -425,13 +425,13 @@ F32 `[head_dim]`, experts F8_E4M3.
 in-vocab / out-of-vocab-rejected / greedy-terminates / **prefill == incremental
 decode**; and `tools/reference/qwen3moe_ref.py` (independent NumPy port, shares
 the E4M3 decode / block-FP8 matmul / RoPE with `qwen38_ref.py`) drives an oracle
-test — Zig logits match NumPy to < 2e-2, argmax exact, on 3 token sets.
+test - Zig logits match NumPy to < 2e-2, argmax exact, on 3 token sets.
 
 Still open: logit cross-check vs HF `transformers` (needs the 61 GB BF16 or
 `transformers` FP8 loading); `budget.plan` is bypassed (`forward3` sizes its own
 KV bank).
 
-## Phase 12 — `serve` (HTTP API)
+## Phase 12 - `serve` (HTTP API)
 
 ```
 src/cli/serve.zig   one connection at a time (local use); the model stays warm;
@@ -440,13 +440,13 @@ src/cli/args.zig    + --port / --host
 src/main.zig        `serve` is a real command
 ```
 
-- `POST /v1/chat/completions` — request `{messages, max_tokens, temperature,
+- `POST /v1/chat/completions` - request `{messages, max_tokens, temperature,
   top_p, stream}`; non-stream returns the OpenAI `chat.completion` shape,
   `stream:true` returns Server-Sent Events (`data: {choices:[{delta:{content}}]}`
   … `data: [DONE]`).
 - `GET /v1/models`, `GET /` (health).
 - `serveGeneric(comptime Mdl)` is instantiated for both `qwen38/model.zig` and
-  `qwen3moe/model.zig` — same `Model` / `State` / `Scratch` / `forward` shape.
+  `qwen3moe/model.zig` - same `Model` / `State` / `Scratch` / `forward` shape.
 - `std.http.Server` over a `std.Io.net` TCP stream. Verified end-to-end against
   `Qwen3-30B-A3B-FP8` (non-stream JSON + SSE token deltas, correct escaping).
 
@@ -462,23 +462,23 @@ The first real run was ~32 s to first token and ~0.04 tok/s. A profiling pass
 took it to ~29 s TTFT (16-token prompt) / ~0.25 tok/s, all changes tests + oracle
 clean:
 
-- `src/ops/matmul.zig` — `dotBf16` widening vectorised (bit-identical).
-- `src/model/weights.zig` — `Weights.find` is an O(1) name index, not a linear
+- `src/ops/matmul.zig` - `dotBf16` widening vectorised (bit-identical).
+- `src/model/weights.zig` - `Weights.find` is an O(1) name index, not a linear
   scan of the manifest; `lmHead` fans over `parallel.chunks`.
-- `src/ops/fp8.zig` — 256-entry E4M3 LUT; `matmulFp8` dequants each weight row
+- `src/ops/fp8.zig` - 256-entry E4M3 LUT; `matmulFp8` dequants each weight row
   once then SIMD-dots.
-- `src/qwen38/moe.zig` — `Fp8Matrix` borrows the shard mmap (no copy);
+- `src/qwen38/moe.zig` - `Fp8Matrix` borrows the shard mmap (no copy);
   `forwardGrouped` evaluates each distinct routed expert once per prefill.
-- `src/runtime/budget.zig` — plan splits **private resident** (hard requirement)
+- `src/runtime/budget.zig` - plan splits **private resident** (hard requirement)
   from **expert stream** (reclaimable page cache); see `MEMORY_BUDGET.md`.
-- `src/cli/chat.zig` — no `--prompt` → interactive multi-turn REPL, live token
+- `src/cli/chat.zig` - no `--prompt` → interactive multi-turn REPL, live token
   streaming, per-reply `tok/s` (state carries across turns; `/reset`, `/exit`).
 
-Tried and reverted: async `std.Io.Group` expert-page prewarm (no win — the matmul
+Tried and reverted: async `std.Io.Group` expert-page prewarm (no win - the matmul
 fan-out already overlaps cold reads).
 
 Still open: logit validation vs the reference weights; QSA per-head threading;
-GPU backend. (Per-expert MoE decode threading: done — Phase 9b above.)
+GPU backend. (Per-expert MoE decode threading: done - Phase 9b above.)
 
 ## Exit codes
 
@@ -503,4 +503,4 @@ zig build run -- stress test/fixtures/tiny --context 8192 --steps 10           #
 
 When a real `config.json` + `model.safetensors.index.json` are available,
 `inspect <dir>` runs on metadata alone (no weight download) and its figures
-should land near colibri's published numbers — see `MEMORY_BUDGET.md`.
+should land near colibri's published numbers - see `MEMORY_BUDGET.md`.

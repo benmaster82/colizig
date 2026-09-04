@@ -1,5 +1,5 @@
 //! Qwen3-MoE attention: plain causal GQA with per-head QK RMSNorm and full
-//! RoPE. Much simpler than Qwen4-Exp's QSA — no indexer, no block selection,
+//! RoPE. Much simpler than Qwen4-Exp's QSA - no indexer, no block selection,
 //! no output gate. q/k/v/o projections are block-FP8 (E4M3) in the FP8
 //! checkpoint; q_norm / k_norm are BF16 vectors of length `head_dim`.
 //!

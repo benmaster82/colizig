@@ -2,7 +2,7 @@
 
 Ports colibri's `step` + `q38_gr_read` / `q38_gr_apply`.
 
-## Gated residual — `residual.zig`
+## Gated residual - `residual.zig`
 
 The residual state `hyper` is `[S, hc_width]` = `[S, hc_count·hidden]` (4 branches).
 
@@ -31,12 +31,12 @@ row-by-row projection).
 
 ## `State` (per sequence)
 
-- `gdn[i]` — `GdnState` for each DeltaNet layer (persistent recurrent + conv ring)
-- `qsa[i]` — `Cache` for each attention layer, sized to `max_context`
-- `experts[i]` — bounded `ExpertCache` per layer (content, not sequence state:
+- `gdn[i]` - `GdnState` for each DeltaNet layer (persistent recurrent + conv ring)
+- `qsa[i]` - `Cache` for each attention layer, sized to `max_context`
+- `experts[i]` - bounded `ExpertCache` per layer (content, not sequence state:
   `reset()` leaves it warm)
-- `ple_state` — conv ring + n-gram history
-- `pos` — tokens processed so far
+- `ple_state` - conv ring + n-gram history
+- `pos` - tokens processed so far
 
 ## `forward(model, state, sc, ids, logits)`
 
@@ -68,7 +68,7 @@ colizig forward <MODEL_DIR> --tokens <id,id,...> [--steps N]
                    [--context K] [--ram-limit G] [--profile P]
 ```
 
-No tokenizer yet — raw integer token ids in, ids out. Sizes the context and
+No tokenizer yet - raw integer token ids in, ids out. Sizes the context and
 expert-cache capacity from the Phase 1 memory plan; refuses if the plan doesn't
 fit. Prints the top-8 logits of the last prompt token and, with `--steps`, the
 greedy continuation.
@@ -80,7 +80,7 @@ greedy continuation.
 - Out-of-vocabulary token ids rejected before any state mutation.
 - Greedy decode stays in vocabulary and stops at EOS.
 - End-to-end numerical validation vs upstream `Qwen4ExpForCausalLM` still needs
-  the Python reference harness (brief §25) — the subsystems are individually
+  the Python reference harness (brief §25) - the subsystems are individually
   faithful ports but the composed result is only invariant-checked so far.
 
 ## Later phases

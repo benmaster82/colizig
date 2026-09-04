@@ -14,7 +14,7 @@ const std = @import("std");
 var g_io: ?std.Io = null;
 var g_max_tasks: usize = 1;
 
-/// Below this many scalar ops, fan-out overhead outweighs the work — stay
+/// Below this many scalar ops, fan-out overhead outweighs the work - stay
 /// serial.  Tuned so the toy fixture never threads but the real model's
 /// projections (millions of MACs) do.
 pub const min_work: usize = 96 * 1024;

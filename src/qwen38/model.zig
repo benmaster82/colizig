@@ -1,13 +1,13 @@
-//! End-to-end Qwen4-Exp forward — wires the embedding, the 48 layers (each a
+//! End-to-end Qwen4-Exp forward - wires the embedding, the 48 layers (each a
 //! gated-residual-wrapped attention/DeltaNet block and MoE block), the PLE
 //! injection at layer 1, the final mixer and the LM head.  Ported from
 //! colibri's `step`.
 //!
 //! Phase 7b: PLE row reads fan out concurrently (`std.Io.Group`) when an `Io`
 //! is supplied; a `Scheduler` + `LastTokenPredictor` drive per-layer expert
-//! prefetch (cooperative execution — the loads still run on the compute thread,
+//! prefetch (cooperative execution - the loads still run on the compute thread,
 //! but the queue policy is real and the prefetch hit rate is measured).  No
-//! tokenizer — `forward` takes raw token ids.
+//! tokenizer - `forward` takes raw token ids.
 
 const std = @import("std");
 const Cfg = @import("../model/config.zig").Cfg;
@@ -188,7 +188,7 @@ pub const State = struct {
         for (self.gdn) |*g| if (g.*) |*gs| gs.reset();
         for (self.qsa) |*q| if (q.*) |*qc| qc.reset();
         self.ple_state.reset();
-        // expert caches are content, not sequence state — leave them warm
+        // expert caches are content, not sequence state - leave them warm
     }
 
     pub fn deinit(self: *State) void {
@@ -211,7 +211,7 @@ pub const Scratch = struct {
     block: []f32, // [max_tokens * hidden]
     inject: []f32, // [max_tokens * hc_count]
     ple_out: []f32, // [max_tokens * hc_width]
-    routed: []u32, // [topk] — last token's routed experts, for the predictor
+    routed: []u32, // [topk] - last token's routed experts, for the predictor
     gr: residual.Scratch,
     gd: gdn.Scratch,
     qs: qsa.Scratch,
@@ -278,7 +278,7 @@ pub fn forward(model: *Model, state: *State, sc: *Scratch, ids: []const i64, log
         }
     }
 
-    // PLE row reads are deterministic (pure function of the token ids) — start
+    // PLE row reads are deterministic (pure function of the token ids) - start
     // them now, before layer 0, so they overlap the layers that precede the
     // injection point.
     var ple_pf: ?[]f32 = null;
@@ -288,7 +288,7 @@ pub fn forward(model: *Model, state: *State, sc: *Scratch, ids: []const i64, log
     }
 
     // NOTE: an async "prewarm the predicted experts' E4M3 pages N layers ahead
-    // on std.Io workers" experiment was tried here and removed — it did not beat
+    // on std.Io workers" experiment was tried here and removed - it did not beat
     // the baseline on this hardware.  The MoE matmul already fans over
     // `parallel.chunks` workers, so when one worker stalls on a cold expert page
     // the others keep computing; the demand path itself waits < 20 ms/forward on
@@ -496,7 +496,7 @@ test "end-to-end forward on the tiny fixture: prefill == incremental decode" {
     const tok = [_]i64{ids[0]};
     for (0..6) |_| try forward(&model, &stp, &sc, &tok, lp, opts);
 
-    // prefetch must not change the result — bit-identical on the same trajectory
+    // prefetch must not change the result - bit-identical on the same trajectory
     var stn = try State.init(gpa, &model, ctx, tight_cap, io);
     defer stn.deinit();
     const ln = try gpa.alloc(f32, V);

@@ -2,7 +2,7 @@
 //!
 //! This is the core of Qwen's chat template.  The upstream
 //! `chat_template.jinja` also injects a default system message, tool
-//! declarations, and reasoning-effort / thinking blocks — not replicated here.
+//! declarations, and reasoning-effort / thinking blocks - not replicated here.
 
 const std = @import("std");
 

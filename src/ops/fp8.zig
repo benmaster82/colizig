@@ -75,7 +75,7 @@ const Vu = @Vector(L, u32);
 const Vf = @Vector(L, f32);
 
 /// Decode one `L`-lane chunk of E4M3 bytes to f32 and fold in the block scale
-/// `sc` (broadcast — the caller guarantees the chunk stays inside one 128-block).
+/// `sc` (broadcast - the caller guarantees the chunk stays inside one 128-block).
 /// The f32 bit pattern is built arithmetically; see `dequantRow`'s doc comment.
 inline fn decodeLane(bytes: @Vector(L, u8), sc: Vf) Vf {
     const Vs = @Vector(L, u5);
@@ -106,7 +106,7 @@ inline fn decodeLane(bytes: @Vector(L, u8), sc: Vf) Vf {
 }
 
 /// Decode a full E4M3 weight row into f32, folding in the per-128-block scale,
-/// entirely with `@Vector` ops — no 256-entry gather, no per-byte branch.
+/// entirely with `@Vector` ops - no 256-entry gather, no per-byte branch.
 ///
 /// E4M3 is `[sign:1][exp:4][mant:3]`, bias 7.  A **normal** value
 /// `(-1)^s · (1 + mant/8) · 2^(exp-7)` maps straight onto the f32 field layout
@@ -115,7 +115,7 @@ inline fn decodeLane(bytes: @Vector(L, u8), sc: Vf) Vf {
 ///     f32_bits = (s << 31) | ((exp + 120) << 23) | (mant << 20)
 ///
 /// (`exp + 120` re-biases 7→127; `mant << 20` places the 3 mantissa bits).  This
-/// is bit-exact — no rounding, the value is representable.  **Subnormals**
+/// is bit-exact - no rounding, the value is representable.  **Subnormals**
 /// (`exp == 0`, mant ≠ 0) are `(-1)^s · mant · 2^-9`, computed as a small normal
 /// f32 `float(mant) · 2^-9` with the sign bit OR'd back in.  Zero and the lone
 /// NaN (`0x7F` / `0xFF`) fall out of these two paths (NaN is `@select`ed in).
@@ -161,7 +161,7 @@ fn dotFp8Row(x: []const f32, w: []const u8, scale_row: []const f32) f32 {
 
 /// y[S, O] = x[S, I] @ (dequant(w))ᵀ, with `w` row-major `[O, I]` E4M3 and
 /// `scales` row-major `[nblk(O), nblk(I)]`. `key` (0 = none) identifies this
-/// weight to the CUDA VRAM cache — see `backend/gpu.zig`.
+/// weight to the CUDA VRAM cache - see `backend/gpu.zig`.
 pub fn matmulFp8Keyed(
     y: []f32,
     x: []const f32,
@@ -187,14 +187,14 @@ pub fn matmulFp8Keyed(
     matmulFp8Cpu(y, x, w, scales, S, I, O, nbi);
 }
 
-/// Unkeyed convenience — the tiny-fixture tests and any FP8 matmul without a
+/// Unkeyed convenience - the tiny-fixture tests and any FP8 matmul without a
 /// stable identity (never cached on the GPU).
 pub fn matmulFp8(y: []f32, x: []const f32, w: []const u8, scales: []const f32, S: usize, I: usize, O: usize) void {
     matmulFp8Keyed(y, x, w, scales, S, I, O, 0);
 }
 
 /// GPU-result check (`--cuda-verify`): recompute on the CPU into a scratch and
-/// report the divergence. Bounded stack scratch — only reached for the MoE
+/// report the divergence. Bounded stack scratch - only reached for the MoE
 /// projections (I,O ≤ hidden = 2560).
 fn verifyGpu(y: []const f32, x: []const f32, w: []const u8, scales: []const f32, S: usize, I: usize, O: usize, nbi: usize) void {
     if (S * O > 8192) return;
@@ -226,7 +226,7 @@ fn matmulFp8Cpu(y: []f32, x: []const f32, w: []const u8, scales: []const f32, S:
     const ctx = Ctx{ .y = y, .x = x, .w = w, .scales = scales, .S = S, .I = I, .O = O, .nbi = nbi };
 
     if (S == 1) {
-        // Decode path: fuse the E4M3 decode into the dot — no f32 weight-row
+        // Decode path: fuse the E4M3 decode into the dot - no f32 weight-row
         // buffer, no store/reload (the dequant is ~90 % of this kernel's cost).
         parallel.chunks(O, O * I, ctx, struct {
             fn body(c: Ctx, o0: usize, o1: usize) void {
@@ -258,7 +258,7 @@ fn matmulFp8Cpu(y: []f32, x: []const f32, w: []const u8, scales: []const f32, S:
 
 // ---- tests -----------------------------------------------------------
 
-/// A handful of E4M3 bytes that decode to exact small values — used by the
+/// A handful of E4M3 bytes that decode to exact small values - used by the
 /// fixture generator and the tests below.
 pub const demo_bytes = [_]u8{ 0x38, 0x34, 0x30, 0x3c, 0xb8, 0xb4, 0x40, 0x2c };
 pub const demo_values = [_]f32{ 1.0, 0.75, 0.5, 1.5, -1.0, -0.75, 2.0, 0.375 };

@@ -1,4 +1,4 @@
-//! `serve <MODEL_DIR> [--port N] [--host H]` — a minimal OpenAI-compatible HTTP
+//! `serve <MODEL_DIR> [--port N] [--host H]` - a minimal OpenAI-compatible HTTP
 //! endpoint. One connection at a time (local use), the model stays warm, every
 //! request is stateless (send the full message history, as the OpenAI API does).
 //!
@@ -84,7 +84,7 @@ fn serveGeneric(
     var server = try net.IpAddress.listen(&addr, io, .{ .reuse_address = true });
     defer server.socket.close(io);
 
-    try out.print("colizig serve — http://{s}:{d}/v1/chat/completions\n", .{ host, port });
+    try out.print("colizig serve - http://{s}:{d}/v1/chat/completions\n", .{ host, port });
     try out.flush();
 
     var conn_rbuf: [64 * 1024]u8 = undefined;
@@ -125,7 +125,7 @@ fn handle(
     const path = target[0 .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
 
     if (req.head.method == .GET and (std.mem.eql(u8, path, "/") or std.mem.eql(u8, path, "/health"))) {
-        try req.respond("colizig serve — POST /v1/chat/completions\n", .{});
+        try req.respond("colizig serve - POST /v1/chat/completions\n", .{});
         return;
     }
     if (req.head.method == .GET and std.mem.eql(u8, path, "/v1/models")) {

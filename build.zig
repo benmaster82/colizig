@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    // The engine streams a ~170 GB model through numeric kernels — a Debug build
+    // The engine streams a ~170 GB model through numeric kernels - a Debug build
     // is 3-4x slower and only misleads benchmarks. Default to ReleaseFast; pass
     // `-Doptimize=Debug` (or `ReleaseSafe`) explicitly for safety-checked runs.
     const optimize = b.option(

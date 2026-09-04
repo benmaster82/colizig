@@ -1,6 +1,6 @@
 //! A pass-through allocator that tracks current and peak live bytes.
 //!
-//! This is *our* allocation accounting, not process RSS — but it lines up with
+//! This is *our* allocation accounting, not process RSS - but it lines up with
 //! the memory-model tiers and lets `benchmark` / `stress` report an honest
 //! "peak tracked bytes" without a platform RSS call.
 

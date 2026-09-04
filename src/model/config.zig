@@ -213,7 +213,7 @@ pub fn parseSlice(gpa: std.mem.Allocator, bytes: []const u8, err: *std.Io.Writer
     c.q_heads = try reqInt(u32, tc, "num_attention_heads", err);
     c.kv_heads = try reqInt(u32, tc, "num_key_value_heads", err);
     c.head_dim = try reqInt(u32, tc, "head_dim", err);
-    // Upstream derives rotary_dim with Python int() — truncation toward zero.
+    // Upstream derives rotary_dim with Python int() - truncation toward zero.
     const rd: f64 = @as(f64, @floatFromInt(c.head_dim)) * @as(f64, c.partial_rotary);
     if (!(rd >= 0) or rd > std.math.maxInt(u32)) {
         try err.writeAll("config.json: derived rotary_dim out of range\n");
@@ -407,7 +407,7 @@ fn validateQwen3Moe(c: Cfg, err: *std.Io.Writer) !void {
     const need = struct {
         fn f(ok: bool, w: *std.Io.Writer, comptime msg: []const u8) !void {
             if (!ok) {
-                try w.writeAll("config.json: " ++ msg ++ " — refusing\n");
+                try w.writeAll("config.json: " ++ msg ++ " - refusing\n");
                 return error.InvalidConfig;
             }
         }
@@ -430,7 +430,7 @@ fn validateQwen4Exp(c: Cfg, err: *std.Io.Writer) !void {
     const need = struct {
         fn f(ok: bool, w: *std.Io.Writer, comptime msg: []const u8) !void {
             if (!ok) {
-                try w.writeAll("config.json: " ++ msg ++ " — refusing\n");
+                try w.writeAll("config.json: " ++ msg ++ " - refusing\n");
                 return error.InvalidConfig;
             }
         }

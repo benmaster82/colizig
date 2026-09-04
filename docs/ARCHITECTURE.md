@@ -1,8 +1,8 @@
-# Qwen3.8-Flash-Next / Qwen4-Exp — architecture
+# Qwen3.8-Flash-Next / Qwen4-Exp - architecture
 
 Values below are from the HF `config.json` of `Qwen/Qwen3.8-Flash-Next-FP8`,
 cross-checked against colibri's `c/qwen38_core.h` and `docs/qwen38.md`. The
-engine reads them from `config.json` at runtime — nothing here is hard-coded
+engine reads them from `config.json` at runtime - nothing here is hard-coded
 (`src/model/config.zig`).
 
 **Verified against the real checkpoint** (2026-09, metadata only): the strict
@@ -12,7 +12,7 @@ with **zero `unknown`** (147,456 routed-expert tensors = 512×48×6, 128 PLE tab
 shards, 3,101 MTP + 333 vision correctly ignored); the config-derived resident
 estimate is **9.22 GiB** and the memory plan reproduces colibri's published
 figures (28 MiB scale bank, 54 KiB/token context, cap-16 = 3.5 GiB, cap-64
-wants 32 GB).  The full-weight forward is still unvalidated — see
+wants 32 GB).  The full-weight forward is still unvalidated - see
 `docs/REFERENCE.md`.
 
 ## Config
@@ -82,7 +82,7 @@ wants 32 GB).  The full-weight forward is still unvalidated — see
   addresses, read 16×160 B E4M3 rows, project and fold into the residual via a
   causal conv. The ~51B-row table **never becomes resident**.
 
-## Forward pipeline (target — Phase 2+)
+## Forward pipeline (target - Phase 2+)
 
 ```
 token ─▶ embed ─▶ [gated-residual read ─▶ (GDN | QSA) ─▶ gated-residual write

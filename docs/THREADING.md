@@ -1,7 +1,7 @@
 # Threaded kernels (`src/runtime/parallel.zig`)
 
 Opt-in loop parallelism for the hot paths, via `std.Io.Group` (Zig 0.16's
-concurrency primitive — `std.Thread.Pool` was removed).
+concurrency primitive - `std.Thread.Pool` was removed).
 
 ## The switch
 
@@ -18,7 +18,7 @@ Splits `[0, n)` into up to `min(max_tasks, n)` contiguous ranges and runs
 write **disjoint or append-only** state across chunks.
 
 `work` is the loop's approximate total scalar-op count. Below
-`parallel.min_work` (96 Ki) it runs **serially even when enabled** — a small
+`parallel.min_work` (96 Ki) it runs **serially even when enabled** - a small
 loop cannot amortize the `Io.Group` coordination cost. (The first, un-thresholded
 version of this was ~24× *slower* on the toy fixture; the threshold is the fix,
 matching the `if` clause on an OpenMP pragma.)
@@ -33,18 +33,18 @@ matching the `if` clause on an OpenMP pragma.)
 | MoE decode expert eval (`qwen38/moe.zig` `forwardDense`) | top-k experts | `K·3·I·H` |
 
 Every fanned task writes `y[… + o]` (matmul), its own `rec[h]` / `core[h]` /
-`delta[h]` slice (GDN), or its own `eo[z]` row (MoE) — disjoint. **The output is
+`delta[h]` slice (GDN), or its own `eo[z]` row (MoE) - disjoint. **The output is
 bit-identical to the serial path**, verified by:
 
-- `ops/matmul.zig` — a `[512×256]` matmul, threaded vs serial, `expectEqual`.
-- `qwen38/model.zig` — the whole `forward`, threaded vs serial, `expectEqual`.
-- `forward` on the real checkpoint — `--threads 1` vs `12` token-for-token equal.
+- `ops/matmul.zig` - a `[512×256]` matmul, threaded vs serial, `expectEqual`.
+- `qwen38/model.zig` - the whole `forward`, threaded vs serial, `expectEqual`.
+- `forward` on the real checkpoint - `--threads 1` vs `12` token-for-token equal.
 
 ### Nested fan-out
 
 `parallel.zig` keeps a `threadlocal in_worker` flag: a `chunks` call made from
 *inside* a worker body runs serially. So the MoE expert fan-out (`forwardDense`)
-does not spawn a second fan-out per expert matmul — the split is over experts,
+does not spawn a second fan-out per expert matmul - the split is over experts,
 which are coarser tasks with less coordination overhead for the same work. The
 top-k experts are pulled into the `ExpertCache` serially *before* the fan-out
 (the cache handoff stays single-threaded); only the pure-compute SwiGLU eval is
@@ -56,9 +56,9 @@ expert GEMM and the LM head.
 
 ## What is not threaded
 
-- QSA per-query-head attention — ~94 ms/forward warm, noise next to MoE's 1.4 s,
+- QSA per-query-head attention - ~94 ms/forward warm, noise next to MoE's 1.4 s,
   and it needs per-head score/softmax scratch to avoid races. Not worth it.
-- `Model.load` (48 layers loaded sequentially — a one-time cost).
+- `Model.load` (48 layers loaded sequentially - a one-time cost).
 - Prefill batching (colibri's bounded 32-row chunks; `Scratch` is sized to the
   whole prompt).
 

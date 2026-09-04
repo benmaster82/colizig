@@ -1,6 +1,6 @@
 //! Token sampling: temperature → top-k → top-p (nucleus) → draw.
 //!
-//! `temperature == 0` (the default) is exact greedy / argmax — deterministic,
+//! `temperature == 0` (the default) is exact greedy / argmax - deterministic,
 //! bit-identical to the old decode loop.  Any of `temperature > 0`, `top_k > 0`,
 //! `top_p < 1` switches on stochastic sampling seeded from `seed` (0 → time).
 
@@ -108,7 +108,7 @@ fn gtByLogit(logits: []const f32, a: u32, b: u32) bool {
 }
 
 /// Partition `idx` so its first `k` entries are the `k` largest by `logits`
-/// (unordered).  Simple selection — `k` is tiny next to a decode step.
+/// (unordered).  Simple selection - `k` is tiny next to a decode step.
 fn partialTopK(idx: []u32, logits: []const f32, k: usize) void {
     var i: usize = 0;
     while (i < k) : (i += 1) {
@@ -123,7 +123,7 @@ fn partialTopK(idx: []u32, logits: []const f32, k: usize) void {
     }
 }
 
-/// A fresh seed each run from the platform RNG (non-secure is fine — it only
+/// A fresh seed each run from the platform RNG (non-secure is fine - it only
 /// needs to vary).
 fn seedFromClock(io: std.Io) u64 {
     var buf: [8]u8 = undefined;

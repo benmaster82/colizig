@@ -18,7 +18,7 @@ pk ple_conv_k           4      np  split_ngram_parts    128
 Tensor names are shown without the `model.language_model.` / `model.` prefix.
 Layer index `i` runs 0..47; PLE lives on layer **1**.
 
-## Persistent (whole model) — resident, BF16 unless noted
+## Persistent (whole model) - resident, BF16 unless noted
 
 | name | shape | dtype |
 |---|---|---|
@@ -28,9 +28,9 @@ Layer index `i` runs 0..47; PLE lives on layer **1**.
 | `hyper_connection_mixer.input_mix_weight_down.weight` | `[R, W]` | BF16 |
 | `hyper_connection_mixer.input_mix_weight_up.weight` | `[W, R]` | BF16 |
 
-## Per layer (×48) — resident
+## Per layer (×48) - resident
 
-**Gated residual** — `X ∈ {attn, mlp}`, `layers.i.X_hyper_connection.*`:
+**Gated residual** - `X ∈ {attn, mlp}`, `layers.i.X_hyper_connection.*`:
 
 | suffix | shape | dtype | category |
 |---|---|---|---|
@@ -39,7 +39,7 @@ Layer index `i` runs 0..47; PLE lives on layer **1**.
 | `input_mix_weight_up.weight` | `[W, R]` | BF16 | gated_residual |
 | `block_inject_weight.weight` | `[hc_count, W]` = `[4, W]` | BF16 | gated_residual |
 
-**MoE common** — `layers.i.mlp.*`:
+**MoE common** - `layers.i.mlp.*`:
 
 | suffix | shape | dtype | category |
 |---|---|---|---|
@@ -49,7 +49,7 @@ Layer index `i` runs 0..47; PLE lives on layer **1**.
 | `shared_expert.down_proj.weight` | `[H, SI]` | BF16 | shared_expert |
 | `shared_expert_gate.weight` | `[H]` | F32 | shared_expert |
 
-**QSA layers** (12) — `layers.i.self_attn.*`:
+**QSA layers** (12) - `layers.i.self_attn.*`:
 
 | suffix | shape | dtype | category |
 |---|---|---|---|
@@ -61,7 +61,7 @@ Layer index `i` runs 0..47; PLE lives on layer **1**.
 | `indexer.index_qk_proj.weight` | `[(iq+ik)·id, H]` = `[640, H]` | BF16 | qsa_indexer |
 | `indexer.q_layernorm.weight` / `indexer.k_layernorm.weight` | `[id]` = `[128]` | F32 | qsa_indexer |
 
-**Gated DeltaNet layers** (36) — `layers.i.linear_attn.*`:
+**Gated DeltaNet layers** (36) - `layers.i.linear_attn.*`:
 
 | suffix | shape | dtype | category |
 |---|---|---|---|
@@ -73,7 +73,7 @@ Layer index `i` runs 0..47; PLE lives on layer **1**.
 | `norm.weight` | `[vd]` = `[128]` | F32 | deltanet |
 | `out_proj.weight` | `[H, vh·vd]` = `[H, 6144]` | BF16 | deltanet |
 
-## Per layer × per expert (×48 × 512) — **streamable**, native E4M3
+## Per layer × per expert (×48 × 512) - **streamable**, native E4M3
 
 `layers.i.mlp.experts.e.*` (per-expert layout):
 
@@ -87,14 +87,14 @@ Layer index `i` runs 0..47; PLE lives on layer **1**.
 | `down_proj.weight_scale_inv` | `[20, 5]` | F32 |
 
 Fused alternative (upstream text class): `layers.i.mlp.experts.gate_up_proj`
-`[E, 2I, H]`, `layers.i.mlp.experts.down_proj` `[E, H, I]` — sliced per expert.
+`[E, 2I, H]`, `layers.i.mlp.experts.down_proj` `[E, H, I]` - sliced per expert.
 
 The block-scale sidecars are small enough to keep **resident** for every expert
 (colibri's "FP8 scale bank", ~28 MiB) so a cache miss is a single FP8 read.
 
-## PLE — layer 1 only
+## PLE - layer 1 only
 
-**Dense + meta — resident:**
+**Dense + meta - resident:**
 
 | name | shape | dtype | category |
 |---|---|---|---|
@@ -107,7 +107,7 @@ The block-scale sidecars are small enough to keep **resident** for every expert
 | `layers.1.ple.ple_embedding.ngram_heads_offsets` | `[16]` | I64 | ple_meta |
 | `layers.1.ple.ple_embedding.ngram_embedding.weight_scale` | `[1]` | F32 | ple_meta |
 
-**N-gram table — cold, never resident:**
+**N-gram table - cold, never resident:**
 
 | name | shape | dtype | category |
 |---|---|---|---|

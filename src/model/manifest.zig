@@ -1,4 +1,4 @@
-//! ModelManifest — the checkpoint as metadata only.
+//! ModelManifest - the checkpoint as metadata only.
 //!
 //! Reads `config.json` and either `model.safetensors.index.json` (sharded) or a
 //! lone `model.safetensors`, then parses every shard header (no tensor bodies)
