@@ -10,6 +10,9 @@ zig-out/
 /reference/
 /_colibri/
 
+# Kept locally only, not for the public repo
+/docs/DESIGN_BRIEF.md
+
 # Model checkpoints and anything derived from them - never commit these
 /Models/
 *.safetensors

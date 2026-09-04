@@ -116,8 +116,9 @@ fixture - nothing is faked, an incomplete subsystem returns an error rather
 than a wrong number.
 
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the phase-by-phase
-history, [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the verified model facts, and
-[`docs/DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md) for the original project brief.
+history and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the verified model facts.
+(Docs occasionally cite "the brief §N" - the original project brief that kicked this
+off; it's kept privately, not published in this repo.)
 
 ## Quick start
 
