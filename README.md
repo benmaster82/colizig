@@ -131,6 +131,25 @@ off; it's kept privately, not published in this repo.)
   and, on Windows, MSVC build tools. Everything else works with the CPU only.
 - Optional, only for regenerating the NumPy oracle: **Python 3 + NumPy**.
 
+### Platform
+
+Developed and tested on **Windows** so far - that's the only platform with real
+mileage on it. The engine itself is written against plain Zig std (`std.Io`,
+`std.fs`, ...) with no Windows-only paths in the model/kernel/CLI code, so it's
+expected to build and run on Linux and macOS too; only two things are
+Windows-specific and both degrade gracefully elsewhere:
+
+- the console setup in `main.zig` (UTF-8 + ANSI colour) is a Windows API call
+  guarded by `builtin.os.tag == .windows` - a no-op everywhere else, since
+  Unix terminals already handle UTF-8/ANSI without it;
+- the **CUDA backend** (`--cuda`, `src/backend/gpu.zig`) currently loads its
+  DLL via `LoadLibraryA` and is Windows-only; on other platforms it prints a
+  notice and falls back to the CPU path rather than failing.
+
+This is genuinely untested territory, not a verified claim - if you try it on
+Linux or macOS, a report (working or not) is exactly the kind of feedback the
+[Contributing](#contributing--we-want-your-hardware) section is asking for.
+
 ### Build
 
 ```sh
