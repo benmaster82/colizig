@@ -11,6 +11,7 @@ const budget = @import("../runtime/budget.zig");
 const model_mod = @import("../qwen38/model.zig");
 const meter_mod = @import("../runtime/meter.zig");
 const parallel = @import("../runtime/parallel.zig");
+const gpu = @import("../backend/gpu.zig");
 
 const h = units.human;
 
@@ -23,6 +24,8 @@ pub fn run(
 ) !void {
     parallel.enable(io, opts.threads);
     defer parallel.disable();
+    if (opts.cuda) gpu.init(err);
+    defer gpu.deinit();
     var meter = meter_mod.Meter.init(gpa_in);
     const gpa = meter.allocator();
 

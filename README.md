@@ -50,7 +50,8 @@ is **token-for-token identical to the independent C engine
 | perf: FP8/BF16 matmul SIMD-vectorized, O(1) tensor index, experts borrow the shard mmap (no copy), prefill token→expert grouping — ~10× vs first real run | ✅ |
 | **real-weight validation**: greedy decode token-for-token identical to colibri (independent C engine) on `Qwen/Qwen3.8-Flash-Next-FP8` | ✅ |
 | sampling (`--temperature` / `--top-k` / `--top-p` / `--seed`); learned expert priors (`.colizig_usage`); dual-SSD `--mirror` | ✅ |
-| QSA per-head threading · MTP speculative decode · GPU backend | ❌ remaining |
+| **CUDA backend** (`--cuda`, `src/backend/`): block-FP8 matmul on the GPU via a runtime-loaded `colizig_cuda.dll`; bit-identical, optional, CPU fallback (Phase 10a) | ✅ |
+| 10b VRAM expert cache · QSA per-head threading · MTP speculative decode | ❌ remaining |
 
 `selftest` runs kernel + plumbing checks. Nothing is faked: an incomplete
 subsystem returns an error rather than a wrong number (brief §29).
@@ -69,6 +70,8 @@ Requires **Zig 0.16.0** (pinned in `build.zig.zon`).
 zig build                 # build zig-out/bin/colizig  (ReleaseFast by default)
 zig build test            # unit tests (ReleaseFast; add -Doptimize=Debug for UB checks)
 zig build gen-fixture     # (re)write test/fixtures/tiny/
+zig build cuda            # optional CUDA backend → zig-out/bin/colizig_cuda.dll
+                          # (needs nvcc + MSVC; see build_cuda.ps1 and docs/GPU.md)
 
 # inspect a checkpoint directory — reads config.json + safetensors headers only,
 # never a tensor body:
@@ -90,6 +93,8 @@ zig build run -- forward test/fixtures/tiny --tokens 1,2,3 --steps 5
 # greedy by default; --temperature <f> [--top-k <n>] [--top-p <f>] [--seed <n>] to sample.
 zig build run -- chat <MODEL_DIR> --ram-limit 24G --expert-cap 512
 zig build run -- chat test/fixtures/tiny --prompt "hello world" --steps 12
+# add --cuda to run the block-FP8 matmul on the GPU (needs colizig_cuda.dll):
+zig build run -- chat <MODEL_DIR> --expert-cap 512 --cuda
 
 # runtime telemetry / RAM-budget sweep:
 zig build run -- benchmark test/fixtures/tiny --prompt-len 8 --steps 20

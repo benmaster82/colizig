@@ -29,6 +29,11 @@ pub const Options = struct {
     top_k: u32 = 0,
     top_p: f32 = 1.0,
     seed: u64 = 0,
+    /// `chat` / `forward` / `benchmark`: route the block-FP8 matmul through the
+    /// CUDA backend (`colizig_cuda.dll`) if present; silently CPU otherwise.
+    cuda: bool = false,
+    /// bring-up aid: recompute each GPU matmul on the CPU and print the divergence.
+    cuda_verify: bool = false,
 };
 
 pub const Error = error{ MissingModelDir, BadFlag, MissingValue } || std.Io.Writer.Error;
@@ -55,6 +60,8 @@ pub fn parse(
     var b_topk: u32 = 0;
     var b_topp: f32 = 1.0;
     var b_seed: u64 = 0;
+    var b_cuda: bool = false;
+    var b_cuda_verify: bool = false;
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -109,6 +116,11 @@ pub fn parse(
             };
         } else if (std.mem.eql(u8, a, "--no-usage")) {
             b_no_usage = true;
+        } else if (std.mem.eql(u8, a, "--cuda")) {
+            b_cuda = true;
+        } else if (std.mem.eql(u8, a, "--cuda-verify")) {
+            b_cuda = true;
+            b_cuda_verify = true;
         } else if (std.mem.eql(u8, a, "--mirror")) {
             b_mirror = try value(args, &i, "--mirror", err);
         } else if (std.mem.eql(u8, a, "--temperature") or std.mem.eql(u8, a, "--temp")) {
@@ -177,6 +189,8 @@ pub fn parse(
         .top_k = b_topk,
         .top_p = b_topp,
         .seed = b_seed,
+        .cuda = b_cuda,
+        .cuda_verify = b_cuda_verify,
     };
 }
 

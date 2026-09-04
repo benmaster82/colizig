@@ -35,7 +35,9 @@ ends with: build ✅ · test ✅ · benchmark (once kernels exist) · document.
 | 9b | MoE per-expert threading (decode path fans the top-k SwiGLU evals) | **done** |
 | — | AVX2 / FMA kernel pass (`dotF32`/`dotBf16` 4× `@mulAdd`; fused `dotFp8Row` for S==1) | **done** |
 | MTP | Speculative decode via the checkpoint's MTP head | **investigated, declined** — see below |
-| 10 | *optional* GPU backend (`src/backend/{cpu,gpu}.zig`); CUDA never a hard dependency | |
+| **10a** | CUDA backend plumbing + the block-FP8 matmul on the GPU (`--cuda`), bit-identical | **done** |
+| 10b | VRAM expert cache from `.colizig_usage` priors; stream only cold experts | |
+| 10c | overlap H2D with compute; tune the VRAM budget split; prefetch | |
 
 ## Phase 1 deliverables
 
@@ -349,6 +351,28 @@ decode — a whole phase (`mtp.zig`, `speculative.zig`, a second expert cache,
 manifest/budget/fixture changes) for a moderate, memory-bound-limited gain.
 Not worth it ahead of the GPU backend; revisit if/when a GPU path exists (MTP
 verification batches well on a GPU).
+
+## Phase 10a deliverables
+
+```
+src/backend/cuda/colizig_cuda.cu   block-FP8 matmul kernel + C ABI (nvcc → DLL)
+src/backend/gpu.zig                LoadLibraryA loader + serialised dispatch + --cuda-verify
+src/ops/fp8.zig                    matmulFp8 → gpu.matmulFp8 first, else CPU (matmulFp8Cpu)
+src/qwen38/moe.zig                 forwardDense stays serial when the GPU is up
+src/cli/{args,forward,chat,benchmark}.zig   --cuda / --cuda-verify
+build.zig                          `zig build cuda` (opt-in; nvcc + MSVC)
+build_cuda.ps1                     wrapper that imports the MSVC env first
+```
+
+`--cuda` greedy decode on the real checkpoint is **token-for-token identical** to
+CPU and colibri. Hardware: NVIDIA Quadro T1000 Max-Q (4 GB, sm_75), CUDA 13.0.
+See `docs/GPU.md`. The one non-obvious fix: the CUDA runtime sets the host
+thread's SSE flush-to-zero mode, corrupting every subsequent CPU float op —
+each ABI call now saves/restores MXCSR.
+
+10a re-uploads each expert over PCIe every call (no VRAM cache), so `--cuda`
+decode is currently ~CPU-speed or slower; **10b** (VRAM expert cache from the
+`.colizig_usage` priors) is where the win is. Figures in `docs/BENCHMARK.md`.
 
 ## Real-checkpoint bring-up + perf pass (2026-09)
 

@@ -35,7 +35,8 @@ const usage =
     \\  --no-usage          chat/forward: don't read/write <MODEL_DIR>/.colizig_usage (learned expert priors)
     \\  --mirror <dir>      second copy of the checkpoint on another drive; routed-expert reads split across both
     \\  --temperature <f>  chat/forward: sampling temperature; 0 = greedy (default). also --top-k <n>, --top-p <f>, --seed <n>
-    \\  --gpu <mode>         none | auto ; default: none  (Phase 1: none only)
+    \\  --cuda              chat/forward/benchmark: run the block-FP8 matmul on the GPU via colizig_cuda.dll (`zig build cuda`); CPU if absent
+    \\  --gpu <mode>         none | auto ; memory-plan hint only
     \\  -h, --help           show this message
     \\
 ;
@@ -212,6 +213,7 @@ test {
     _ = @import("ops/softmax.zig");
     _ = @import("ops/activation.zig");
     _ = @import("ops/fp8.zig");
+    _ = @import("backend/gpu.zig");
     _ = @import("qwen38/gdn.zig");
     _ = @import("qwen38/moe.zig");
     _ = @import("qwen38/ple.zig");

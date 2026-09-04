@@ -14,6 +14,7 @@ const model_mod = @import("../qwen38/model.zig");
 const parallel = @import("../runtime/parallel.zig");
 const usage_mod = @import("../runtime/expert_usage.zig");
 const sampler_mod = @import("../runtime/sampler.zig");
+const gpu = @import("../backend/gpu.zig");
 
 pub fn run(
     gpa: std.mem.Allocator,
@@ -28,6 +29,10 @@ pub fn run(
     }
     parallel.enable(io, opts.threads);
     defer parallel.disable();
+    if (opts.cuda) gpu.init(err);
+    gpu.verify = opts.cuda_verify;
+    defer gpu.deinit(); // no-op unless it came up
+    defer gpu.verifySummary();
 
     var prompt: std.ArrayList(i64) = .empty;
     defer prompt.deinit(gpa);

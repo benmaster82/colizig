@@ -18,6 +18,7 @@ const View = @import("../model/tensors.zig").View;
 const fp8 = @import("../ops/fp8.zig");
 const act = @import("../ops/activation.zig");
 const parallel = @import("../runtime/parallel.zig");
+const gpu = @import("../backend/gpu.zig");
 
 pub const Dims = struct {
     hidden: usize,
@@ -473,7 +474,10 @@ fn forwardDense(
     const K = d.topk;
     const I = d.inter;
 
-    const par = cache.cap >= K and K <= 64;
+    // With the CUDA backend up, every expert matmul goes to the GPU through one
+    // serialised context — fanning experts over CPU threads here would only make
+    // them queue on that lock, so stay serial and let the GPU be the parallelism.
+    const par = cache.cap >= K and K <= 64 and !gpu.available();
 
     for (0..S) |s| {
         const xs = x[s * H ..][0..H];

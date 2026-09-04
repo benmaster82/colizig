@@ -27,6 +27,14 @@ zig-out/
 *.env
 /winca.pem
 
+# CUDA backend build artifacts (colizig_cuda.dll lands in zig-out/, ignored above)
+*.dll
+*.exp
+*.lib
+*.obj
+*.cubin
+*.ptx
+
 # Python
 __pycache__/
 *.pyc

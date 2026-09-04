@@ -8,6 +8,7 @@
 const std = @import("std");
 const parallel = @import("../runtime/parallel.zig");
 const mm = @import("matmul.zig");
+const gpu = @import("../backend/gpu.zig");
 
 pub const block: usize = 128;
 
@@ -174,6 +175,36 @@ pub fn matmulFp8(
     std.debug.assert(scales.len == nblk(O) * nbi);
     std.debug.assert(I <= max_dequant_row);
 
+    // Phase 10a: if the CUDA backend is up (`--cuda`), it takes the whole matmul.
+    // It re-uploads the weights every call for now; false → fall to the CPU.
+    if (gpu.matmulFp8(y, x, w, scales, S, I, O)) {
+        if (gpu.verify) verifyGpu(y, x, w, scales, S, I, O, nbi);
+        return;
+    }
+
+    matmulFp8Cpu(y, x, w, scales, S, I, O, nbi);
+}
+
+/// GPU-result check (`--cuda-verify`): recompute on the CPU into a scratch and
+/// report the divergence. Bounded stack scratch — only reached for the MoE
+/// projections (I,O ≤ hidden = 2560).
+fn verifyGpu(y: []const f32, x: []const f32, w: []const u8, scales: []const f32, S: usize, I: usize, O: usize, nbi: usize) void {
+    if (S * O > 8192) return;
+    var scratch: [8192]f32 = undefined;
+    const ref = scratch[0 .. S * O];
+    matmulFp8Cpu(ref, x, w, scales, S, I, O, nbi);
+    var max_abs: f32 = 0;
+    var max_rel: f32 = 0;
+    for (y, ref) |g, c| {
+        const a = @abs(g - c);
+        if (a > max_abs) max_abs = a;
+        const denom = @abs(c);
+        if (denom > 1e-6 and a / denom > max_rel) max_rel = a / denom;
+    }
+    gpu.verifyReport(max_abs, max_rel, S, I, O);
+}
+
+fn matmulFp8Cpu(y: []f32, x: []const f32, w: []const u8, scales: []const f32, S: usize, I: usize, O: usize, nbi: usize) void {
     const Ctx = struct {
         y: []f32,
         x: []const f32,

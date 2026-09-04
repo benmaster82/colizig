@@ -18,6 +18,7 @@ const model_mod = @import("../qwen38/model.zig");
 const tok_mod = @import("../qwen38/tokenizer.zig");
 const template = @import("../qwen38/chat_template.zig");
 const parallel = @import("../runtime/parallel.zig");
+const gpu = @import("../backend/gpu.zig");
 const usage_mod = @import("../runtime/expert_usage.zig");
 const sampler_mod = @import("../runtime/sampler.zig");
 
@@ -224,6 +225,8 @@ pub fn run(
 ) !void {
     parallel.enable(io, opts.threads);
     defer parallel.disable();
+    if (opts.cuda) gpu.init(err);
+    defer gpu.deinit();
 
     var dir = openDirAny(io, opts.model_dir) catch {
         try err.print("chat: cannot open model directory \"{s}\"\n", .{opts.model_dir});

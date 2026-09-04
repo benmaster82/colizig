@@ -260,7 +260,41 @@ optimisations, mirrored: after the SIMD pass, compute is no longer the wall.
 The remaining real lever is the **GPU backend** (Phase 10 — deferred) or moving
 fewer bytes (int4, out of scope).
 
+## Phase 10a — CUDA backend, first kernel (2026-09-04)
+
+Hardware: NVIDIA **Quadro T1000 Max-Q** (4 GB, sm_75, ~128 GB/s), CUDA 13.0,
+MSVC 14.44. `--cuda` routes the block-FP8 MoE-expert matmul to
+`colizig_cuda.dll`; everything else stays on the CPU.
+
+**Correctness**: `--cuda` greedy decode is **token-for-token identical** to the
+CPU path and to colibri (`760,6511,314,9338,369 → 11751,13,561,6511,314,9564,
+369,19241,13,561,6511,314`). `--cuda-verify` recomputes every GPU matmul on the
+CPU: `max|Δ| ≈ 1e-7` over a full decode.
+
+**Speed** (warm, real checkpoint, cap 512, 16 decode steps):
+
+| | decode tok/s |
+|---|---|
+| CPU (12 threads) | 0.68 |
+| `--cuda` (10a) | **0.35** |
+
+10a is **~2× slower than the CPU** — as expected. It re-uploads each expert's
+~1.5 MB over PCIe on **every** call (≈2.3 GB/token), synchronously, ~1440 tiny
+matmuls per token; the PCIe transfer and launch overhead dwarf the kernel. The
+GPU FP8 arithmetic itself is not the problem — the byte movement is.
+
+This is the baseline that sizes **10b**: a bounded VRAM expert cache filled from
+the `.colizig_usage` priors so hot experts are resident and only cold ones
+stream. At ~90 % hot coverage the per-token PCIe traffic drops ~10×, and the
+T1000's 128 GB/s VRAM (vs the CPU's ~40 GB/s bus) should finally pay off.
+
+Non-obvious bug found and fixed: the CUDA runtime flips the host thread's SSE
+control word to flush-to-zero, silently corrupting every subsequent CPU float
+op (E4M3 subnormal weights are common). Each `.cu` ABI call now saves/restores
+MXCSR. Symptom before the fix: plausible-but-wrong tokens, and `--cuda-verify`
+(which recomputes with the same corrupted mode) reporting Δ=0.
+
 ## Not done
 
 QSA per-head + prefill row-chunking (both small next to MoE); MTP speculative
-decode; GPU backend (Phase 10, deferred).
+decode; **10b** VRAM expert cache; 10c H2D/compute overlap.
