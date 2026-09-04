@@ -223,6 +223,13 @@ pub fn run(
     err: *std.Io.Writer,
     opts: args.Options,
 ) !void {
+    {
+        var m0 = try manifest_mod.open(gpa, io, opts.model_dir, err);
+        const arch = m0.cfg.arch;
+        m0.deinit();
+        if (arch == .qwen3_moe) return @import("chat3.zig").run(gpa, io, out, err, opts);
+    }
+
     parallel.enable(io, opts.threads);
     defer parallel.disable();
     if (opts.cuda) gpu.init(err);

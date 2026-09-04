@@ -38,7 +38,7 @@ ends with: build ✅ · test ✅ · benchmark (once kernels exist) · document.
 | **10a** | CUDA backend plumbing + the block-FP8 matmul on the GPU (`--cuda`), bit-identical | **done** |
 | **10b** | bounded VRAM LRU cache of resident expert weights (`--vram`) | **done — no speedup on 4 GB** |
 | 10c | pinned staging + async streams + batched multi-expert kernels | *open, uncertain on a Max-Q* |
-| **11** | Qwen3-MoE support (Qwen3-30B-A3B) — plain GQA + QK-norm, no PLE/GDN/shared expert | **scaffold done; unvalidated vs real weights (download pending)** |
+| **11** | Qwen3-MoE support (Qwen3-30B-A3B) — plain GQA + QK-norm, no PLE/GDN/shared expert | **done — runs the real FP8 checkpoint end-to-end** |
 
 ## Phase 1 deliverables
 
@@ -402,12 +402,27 @@ src/cli/forward3.zig       `forward` for qwen3_moe (dispatched from forward.zig)
 src/cli/inspect.zig        arch-aware report
 ```
 
-Config parses and the classifier categorises all 37,491 tensors of
-`Qwen/Qwen3-30B-A3B-FP8` with zero unknowns; `inspect` reports it correctly.
-The forward compiles and the existing 67 tests pass, **but it is not yet run
-against the real weights** (30 GB download in progress) and there is no tiny
-qwen3_moe fixture / oracle. Next: fixture + forward smoke test, then a real
-`forward` run and a colibri / HF cross-check.
+Verified end-to-end on the real `Qwen/Qwen3-30B-A3B-FP8` (30.2 GB, 7 shards):
+config parses, all 37,491 tensors classify (0 unknown), and both `forward` and
+`chat` produce correct output —
+
+```
+forward "The capital of France is"  → " Paris. The capital of the United
+                                        Kingdom is London. The capital of"
+chat    "what is a black hole?"     → coherent Qwen3-Thinking reasoning
+```
+
+**~3.2 tok/s CPU decode** (12 threads, cap 128) — ~4× the Qwen3.8-Flash-Next
+rate, since the model is 30 B / 128 experts vs 176 B / 512. `--cuda` is
+bit-identical but still ~4× slower (same 4 GB-VRAM ceiling as Phase 10).
+
+Real shapes (checked against the shard headers): `embed_tokens` F32, router
+(`mlp.gate`) F32, q/k/v/o_proj F8_E4M3 block-scale (`4096×2048` etc.), q/k_norm
+F32 `[head_dim]`, experts F8_E4M3.
+
+Still open: a tiny qwen3_moe fixture + NumPy oracle (regression coverage — the
+current validation is "the output is obviously right"); logit cross-check vs HF
+`transformers`; `budget.plan` is bypassed (`forward3` sizes its own KV bank).
 
 ## Real-checkpoint bring-up + perf pass (2026-09)
 

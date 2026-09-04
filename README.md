@@ -1,13 +1,18 @@
 # colizig
 
-An **experimental** Zig inference engine for **Qwen3.8-Flash-Next**
-(HF: [`Qwen/Qwen3.8-Flash-Next-FP8`](https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8),
-internal codename *Qwen4-Exp*).
+An **experimental** Zig inference engine for Qwen mixture-of-experts models,
+streaming experts from disk so a model that does not fit RAM still runs on a
+laptop. Two families supported:
+
+- **Qwen3.8-Flash-Next** ([`Qwen/Qwen3.8-Flash-Next-FP8`](https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8),
+  internal codename *Qwen4-Exp*) — GDN + QSA + hashed-n-gram PLE + 512-expert MoE.
+- **Qwen3-MoE** ([`Qwen/Qwen3-30B-A3B-FP8`](https://huggingface.co/Qwen/Qwen3-30B-A3B-FP8)
+  and siblings) — plain GQA + QK-norm + 128-expert MoE. `~3 tok/s` CPU decode.
 
 The research question is not "how fast" but **"how small can the resident working
 set be while inference stays useful on ordinary consumer hardware?"** The model
-(~125B MoE params + ~51B hashed n-gram params) is treated as a *computation graph
-whose working set changes over time*, streamed across SSD → RAM → (optional) VRAM.
+is treated as a *computation graph whose working set changes over time*, streamed
+across SSD → RAM → (optional) VRAM.
 
 This is not a llama.cpp / vLLM competitor. It is a testbed for **intelligent
 movement of model state between storage tiers**.
@@ -51,7 +56,8 @@ is **token-for-token identical to the independent C engine
 | **real-weight validation**: greedy decode token-for-token identical to colibri (independent C engine) on `Qwen/Qwen3.8-Flash-Next-FP8` | ✅ |
 | sampling (`--temperature` / `--top-k` / `--top-p` / `--seed`); learned expert priors (`.colizig_usage`); dual-SSD `--mirror` | ✅ |
 | **CUDA backend** (`--cuda` / `--vram`, `src/backend/`): block-FP8 matmul on the GPU via a runtime-loaded `colizig_cuda.dll` + a VRAM weight-cache; bit-identical, optional, CPU fallback (Phase 10a/10b). *Measured ~2× slower than CPU on a 4 GB T1000 — needs 8 GB+ VRAM to win.* | ✅ |
-| 10c async/batched CUDA · QSA per-head threading · MTP speculative decode | ❌ remaining |
+| **Qwen3-MoE** (`model_type: qwen3_moe`, `src/qwen3moe/`): plain GQA + per-head QK-norm + full RoPE + 128-expert MoE (no PLE/GDN/shared expert); `forward` + `chat`. Runs `Qwen3-30B-A3B-FP8` end-to-end at ~3 tok/s CPU. | ✅ |
+| 10c async/batched CUDA · QSA per-head threading · MTP speculative decode · qwen3_moe fixture+oracle | ❌ remaining |
 
 `selftest` runs kernel + plumbing checks. Nothing is faked: an incomplete
 subsystem returns an error rather than a wrong number (brief §29).
@@ -95,6 +101,10 @@ zig build run -- chat <MODEL_DIR> --ram-limit 24G --expert-cap 512
 zig build run -- chat test/fixtures/tiny --prompt "hello world" --steps 12
 # add --cuda to run the block-FP8 matmul on the GPU (needs colizig_cuda.dll):
 zig build run -- chat <MODEL_DIR> --expert-cap 512 --cuda
+
+# Qwen3-MoE (Qwen3-30B-A3B-FP8) — same CLI, auto-detected from config.json:
+zig build run -- inspect C:\Models\Qwen3-30B-A3B-FP8
+zig build run -- chat    C:\Models\Qwen3-30B-A3B-FP8 --expert-cap 128
 
 # runtime telemetry / RAM-budget sweep:
 zig build run -- benchmark test/fixtures/tiny --prompt-len 8 --steps 20

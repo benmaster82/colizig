@@ -346,6 +346,7 @@ pub fn open(gpa: std.mem.Allocator, io: std.Io, dir_path: []const u8, err: *std.
         .tensors = try tensors.toOwnedSlice(gpa),
         .shard_paths = shard_paths,
         .text_prefix = text_prefix,
+        .total_size = total_size,
         .allocator = gpa,
     };
 
