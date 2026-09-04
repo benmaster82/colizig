@@ -33,6 +33,8 @@ ends with: build ✅ · test ✅ · benchmark (once kernels exist) · document.
 | **8c** | `benchmark` (§23 runtime report: tok/s, TTFT, per-phase timers, `compute_stall_due_to_io`) and `stress` (§26 RAM-budget sweep); `Timers` + tracked-bytes `Meter` | **done — awaiting approval** |
 | **9** | Threaded kernels — `runtime/parallel.zig` fans the matmul output-row loop and the GDN recurrent head loop over `std.Io.Group` workers, gated by a work threshold (toy models stay serial). `--threads` flag | **done — awaiting approval** |
 | 9b | MoE per-expert threading (decode path fans the top-k SwiGLU evals) | **done** |
+| — | AVX2 / FMA kernel pass (`dotF32`/`dotBf16` 4× `@mulAdd`; fused `dotFp8Row` for S==1) | **done** |
+| MTP | Speculative decode via the checkpoint's MTP head | **investigated, declined** — see below |
 | 10 | *optional* GPU backend (`src/backend/{cpu,gpu}.zig`); CUDA never a hard dependency | |
 
 ## Phase 1 deliverables
@@ -329,6 +331,24 @@ native CPU (AVX2+FMA). Greedy output token-for-token unchanged. **End-to-end onl
 +3 %** — the 12-thread MoE decode is memory-bandwidth-bound (~1 GB experts/token
 over a ~40 GB/s bus), not FLOP-bound. CPU compute levers are now exhausted; the
 GPU backend (Phase 10, deferred) is the remaining one. See `docs/BENCHMARK.md`.
+
+### MTP speculative decode — investigated, declined (2026-09-04)
+
+The checkpoint's MTP head (`mtp.*`, `mtp_num_hidden_layers: 1`,
+`mtp_use_hidden_state_from_layer: null` → last layer, `layer_types: ["full_attention"]`)
+is **not a lightweight head**: it is a full QSA decoder layer carrying its own
+**512-expert block-FP8 MoE** + shared expert + two hyper-connections +
+`fc_embedding`/`fc_hidden` fusion of `embed(x_{t+1})` and `h_last`. It reuses the
+main `embed_tokens`, `norm`, `lm_head` (`mtp_use_dedicated_embeddings: false`,
+`tie_word_embeddings: false`).
+
+A single MTP forward ≈ 0.15× a main forward (≈10 expert reads vs ≈480). With
+draft depth 1 and a realistic 70–85 % greedy acceptance the speculative loop
+(1 main verify pass at S=2 + 1 MTP forward per round) yields ≈ **1.3–1.5×**
+decode — a whole phase (`mtp.zig`, `speculative.zig`, a second expert cache,
+manifest/budget/fixture changes) for a moderate, memory-bound-limited gain.
+Not worth it ahead of the GPU backend; revisit if/when a GPU path exists (MTP
+verification batches well on a GPU).
 
 ## Real-checkpoint bring-up + perf pass (2026-09)
 

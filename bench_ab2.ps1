@@ -1,5 +1,5 @@
 <#
-  bench_ab2.ps1 - cold + warm A/B: colibri vs qwen38-zig, same checkpoint / prompt
+  bench_ab2.ps1 - cold + warm A/B: colibri vs colizig, same checkpoint / prompt
   / token count / cap / threads / greedy.
 
   For each engine:
@@ -12,13 +12,13 @@
   start-from-nothing number.
 #>
 param(
-  # Path to the Qwen3.8-Flash-Next-FP8 checkpoint dir (or set $env:QWEN38_MODEL).
-  [string]$Model   = $(if ($env:QWEN38_MODEL) { $env:QWEN38_MODEL } else { "D:\Models\Qwen38-FP8" }),
+  # Path to the Qwen3.8-Flash-Next-FP8 checkpoint dir (or set $env:COLIZIG_MODEL).
+  [string]$Model   = $(if ($env:COLIZIG_MODEL) { $env:COLIZIG_MODEL } else { "D:\Models\Qwen38-FP8" }),
   [string]$Prompt  = "The capital of France is",
   [int]   $Tokens  = 24,
   [int]   $Cap     = 64,
   [int]   $Threads = [Environment]::ProcessorCount,
-  [string]$Zig     = (Join-Path $PSScriptRoot "zig-out\bin\qwen38-zig.exe"),
+  [string]$Zig     = (Join-Path $PSScriptRoot "zig-out\bin\colizig.exe"),
   [string]$Colibri = (Join-Path $PSScriptRoot "_colibri\colibri-main\c\qwen38.exe"),
   [string]$MinGW   = "C:\msys64\mingw64\bin"
 )
@@ -81,10 +81,10 @@ if ($haveColibri) {
   Write-Host "`n=== colibri: not found at $Colibri - skipping the A/B half ===" -ForegroundColor DarkYellow
 }
 
-# ============================ qwen38-zig ============================
-Write-Host "`n=== qwen38-zig (cold, then warm) ===" -ForegroundColor Yellow
+# ============================ colizig ============================
+Write-Host "`n=== colizig (cold, then warm) ===" -ForegroundColor Yellow
 Remove-Item (Join-Path $Model ".colizig_usage") -Force -EA SilentlyContinue
-Get-Process qwen38-zig -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue
+Get-Process colizig -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue
 FlushCache
 $zArgs = @("forward", $Model, "--tokens", $ids, "--steps", "$Tokens", "--expert-cap", "$Cap", "--threads", "$Threads", "--ram-limit", "28G")
 $zCold = RunExe $Zig $zArgs @{}
@@ -104,7 +104,7 @@ function Row($label, $a, $b) { "{0,-16}{1,16}{2,16}" -f $label, $a, $b }
 function CM($obj, $rx) { if ($haveColibri) { M $obj $rx } else { "-" } }
 
 Write-Host "`n===================== COLD =====================" -ForegroundColor Green
-Row ""              "colibri" "qwen38-zig"
+Row ""              "colibri" "colizig"
 Row "model load s"  $cc                                                     (M $zCold.Text 'model load:\s*([\d.]+)\s*s')
 Row "TTFT s"        (CM $cCold.Err 'TTFT:\s*([\d.]+)\s*s')                   (M $zCold.Text 'TTFT:\s*([\d.]+)\s*s')
 Row "decode tok/s"  (CM $cCold.Err 'Speed:\s*([\d.]+)\s*tok/s')             (M $zCold.Text 'decode:\s*([\d.]+)\s*tok/s')
@@ -112,7 +112,7 @@ Row "wall s"        $(if ($haveColibri) { [math]::Round($cCold.Wall,1) } else { 
 Row "peak WS GB"    $(if ($haveColibri) { $cCold.PeakGB } else { "-" })     $zCold.PeakGB
 
 Write-Host "`n===================== WARM =====================" -ForegroundColor Green
-Row ""              "colibri" "qwen38-zig"
+Row ""              "colibri" "colizig"
 Row "TTFT s"        (CM $cWarm.Err 'TTFT:\s*([\d.]+)\s*s')                   (M $zWarm.Text 'TTFT:\s*([\d.]+)\s*s')
 Row "decode tok/s"  (CM $cWarm.Err 'Speed:\s*([\d.]+)\s*tok/s')             (M $zWarm.Text 'decode:\s*([\d.]+)\s*tok/s')
 Row "wall s"        $(if ($haveColibri) { [math]::Round($cWarm.Wall,1) } else { "-" })  ([math]::Round($zWarm.Wall,1))
@@ -127,5 +127,5 @@ if ($haveColibri) {
   Write-Host ("warm match : {0}" -f $(if ($cContWarm -eq $zGreedyWarm) { "IDENTICAL" } else { "DIFFER" }))
   Write-Host ("  colibri    : $cContWarm")
 }
-Write-Host ("  qwen38-zig : $zGreedyWarm")
+Write-Host ("  colizig    : $zGreedyWarm")
 Write-Host ("`ndone.") -ForegroundColor Green

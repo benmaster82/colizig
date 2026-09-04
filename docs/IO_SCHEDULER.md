@@ -59,7 +59,7 @@ changes *when* bytes are read, never *which*.
 ## `forward` CLI telemetry
 
 ```
-qwen38-zig forward <dir> --tokens <csv> [--steps N] [--expert-cap K]
+colizig forward <dir> --tokens <csv> [--steps N] [--expert-cap K]
 ```
 
 `--expert-cap` overrides the memory-plan capacity — set it small to see the

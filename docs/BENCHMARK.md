@@ -167,7 +167,7 @@ colibri built `-O3 -march=native -fopenmp` (mingw64).
 
 Prompt "The capital of France is", 24 new tokens:
 
-| | colibri | qwen38-zig |
+| | colibri | colizig |
 |---|---|---|
 | model load | 11.3 s | 13.2 s |
 | TTFT (cold / warm) | 18.1 / 17.7 s | **8.2 / 5.4 s** |
@@ -175,17 +175,17 @@ Prompt "The capital of France is", 24 new tokens:
 | peak working set | 23.9 GB | 27.3 GB |
 | greedy output | — | **token-identical to colibri, cold and warm** |
 
-Second prompt (48 tokens, reasoning-heavy): colibri 0.32 tok/s both, qwen38-zig
+Second prompt (48 tokens, reasoning-heavy): colibri 0.32 tok/s both, colizig
 0.55 cold / 0.51 warm, TTFT ~31 s vs ~13 s. Core generation matches; the two
 diverge by one token near step ~46 (different prompt framing in the harness +
 accumulated f32 rounding between two independent implementations).
 
-**qwen38-zig is now ~1.5–2.5× faster on decode and ~2× on TTFT at parity**, with
+**colizig is now ~1.5–2.5× faster on decode and ~2× on TTFT at parity**, with
 identical greedy output on matched token input. Why the reversal:
 
 - Phase 9b MoE per-expert threading + the SIMD FP8/BF16 kernels + O(1) tensor
   index compound once compiled optimized.
-- qwen38-zig **borrows** the expert mmap — a warm OS page cache directly speeds
+- colizig **borrows** the expert mmap — a warm OS page cache directly speeds
   decode (0.78 → 1.02) and TTFT (8.2 → 5.4). colibri **copies** experts into its
   heap every process (RSS ~24 GB), so a warm page cache barely moves its
   throughput (0.39 → 0.38); it needs its persistent `coli chat` server to
@@ -194,13 +194,13 @@ identical greedy output on matched token input. Why the reversal:
 
 Caveats: one sample per config (run-to-run variance); colibri at cap 64 is
 expert-starved (60–74 % hit rate) and its multi-turn server mode is not measured
-here; qwen38-zig's 27 GB working set is ~7 GB private + reclaimable mmap page
+here; colizig's 27 GB working set is ~7 GB private + reclaimable mmap page
 cache, colibri's 24 GB is private; neither is logit-checked against HF weights
 (colibri is the reference and the output matches it).
 
 ### expert-cap / thread sweep (warm, `bench_cap.ps1`)
 
-qwen38-zig only, "capital of France" 24 tok, all warm, back-to-back (the machine
+colizig only, "capital of France" 24 tok, all warm, back-to-back (the machine
 was thermally loaded from the A/B above — read the **columns relative to each
 other**, not the absolute tok/s):
 

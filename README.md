@@ -1,4 +1,4 @@
-# qwen38-zig
+# colizig
 
 An **experimental** Zig inference engine for **Qwen3.8-Flash-Next**
 (HF: [`Qwen/Qwen3.8-Flash-Next-FP8`](https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8),
@@ -58,14 +58,15 @@ subsystem returns an error rather than a wrong number (brief §29).
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the roadmap,
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the verified model facts, and
 [`docs/DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md) for the original project brief the
-"§N" references throughout the docs point at.
+"§N" references throughout the docs point at (it uses the project's earlier
+working name, *qwen38-zig*).
 
 ## Build & run
 
 Requires **Zig 0.16.0** (pinned in `build.zig.zon`).
 
 ```sh
-zig build                 # build zig-out/bin/qwen38-zig  (ReleaseFast by default)
+zig build                 # build zig-out/bin/colizig  (ReleaseFast by default)
 zig build test            # unit tests (ReleaseFast; add -Doptimize=Debug for UB checks)
 zig build gen-fixture     # (re)write test/fixtures/tiny/
 

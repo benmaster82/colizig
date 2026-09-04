@@ -1,12 +1,12 @@
-<#  bench_cap.ps1 - qwen38-zig only: sweep expert-cap x threads, all WARM.
+<#  bench_cap.ps1 - colizig only: sweep expert-cap x threads, all WARM.
     No cache flush - the OS page cache and .colizig_usage priors stay hot, so
     each row is steady-state decode. One warmup run per config, then measure. #>
 param(
-  # Path to the Qwen3.8-Flash-Next-FP8 checkpoint dir (or set $env:QWEN38_MODEL).
-  [string]$Model  = $(if ($env:QWEN38_MODEL) { $env:QWEN38_MODEL } else { "D:\Models\Qwen38-FP8" }),
+  # Path to the Qwen3.8-Flash-Next-FP8 checkpoint dir (or set $env:COLIZIG_MODEL).
+  [string]$Model  = $(if ($env:COLIZIG_MODEL) { $env:COLIZIG_MODEL } else { "D:\Models\Qwen38-FP8" }),
   [string]$Prompt = "The capital of France is",
   [int]   $Tokens = 24,
-  [string]$Zig    = (Join-Path $PSScriptRoot "zig-out\bin\qwen38-zig.exe")
+  [string]$Zig    = (Join-Path $PSScriptRoot "zig-out\bin\colizig.exe")
 )
 
 $tk  = (& $Zig tokenize $Model --prompt $Prompt) 2>&1 | Out-String

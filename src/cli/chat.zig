@@ -342,7 +342,7 @@ fn banner(out: *std.Io.Writer, io: std.Io, m: *const manifest_mod.Manifest, ctx:
         if (tty) try spriteLine(out, pair) else try out.writeAll(ascii[pair]);
         try out.writeAll("   ");
         switch (pair) {
-            0 => try out.writeAll(C.b ++ C.qwen ++ "Coli" ++ C.zig ++ "Zig" ++ C.rst ++ "  " ++ C.dim ++ "qwen38-zig" ++ C.rst),
+            0 => try out.writeAll(C.b ++ C.qwen ++ "Coli" ++ C.zig ++ "Zig" ++ C.rst ++ "  " ++ C.dim ++ "colizig" ++ C.rst),
             1 => try out.writeAll(C.dim ++ "tiny engine, immense model" ++ C.rst),
             2 => if (disk != 0)
                 try out.print(C.gray ++ "Qwen3.8-Flash-Next · 176B · {f} on disk" ++ C.rst, .{units.human(disk)})

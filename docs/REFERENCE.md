@@ -67,7 +67,7 @@ it to `760 6511 314 9338 369`), greedy, 12 new tokens:
 
 ```
 colibri:   SNAP=<dir> N_NEW=12 ./qwen38.exe 16 8 prompt.txt      # prompt.txt = raw text
-qwen38-zig: forward <dir> --tokens 760,6511,314,9338,369 --steps 12
+colizig: forward <dir> --tokens 760,6511,314,9338,369 --steps 12
 ```
 
 Result — **token-for-token identical**:

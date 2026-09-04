@@ -49,7 +49,7 @@ blocks — not replicated.
 ## `chat` CLI
 
 ```
-qwen38-zig chat <MODEL_DIR> [--prompt "..."] [--system "..."] [--steps N]
+colizig chat <MODEL_DIR> [--prompt "..."] [--system "..."] [--steps N]
                 [--expert-cap K] [--ram-limit G] [--context K]
 ```
 

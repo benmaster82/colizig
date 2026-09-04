@@ -64,7 +64,7 @@ state.pos += S
 ## `forward` CLI
 
 ```
-qwen38-zig forward <MODEL_DIR> --tokens <id,id,...> [--steps N]
+colizig forward <MODEL_DIR> --tokens <id,id,...> [--steps N]
                    [--context K] [--ram-limit G] [--profile P]
 ```
 

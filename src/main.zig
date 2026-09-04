@@ -1,4 +1,4 @@
-//! qwen38-zig — experimental Zig inference engine for Qwen3.8-Flash-Next.
+//! colizig — experimental Zig inference engine for Qwen3.8-Flash-Next.
 //!
 //! Phase 1 scope: metadata only. `inspect` reads config.json + the safetensors
 //! index and reports the architecture and a memory-budget plan WITHOUT loading
@@ -16,16 +16,16 @@ const stress_mod = @import("cli/stress.zig");
 const tokenize_mod = @import("cli/tokenize.zig");
 
 const usage =
-    \\qwen38-zig — minimal Qwen3.8-Flash-Next inference engine (Phase 1)
+    \\colizig — experimental memory-streaming Zig inference engine for Qwen3.8-Flash-Next
     \\
     \\usage:
-    \\  qwen38-zig inspect <MODEL_DIR> [options]     print architecture + memory plan (no weights loaded)
-    \\  qwen38-zig selftest [MODEL_DIR]              bring-up checks: ops kernels, weights, GDN/MoE/PLE/QSA
-    \\  qwen38-zig forward <MODEL_DIR> --tokens <csv> [--steps N] [--expert-cap K]   end-to-end forward on raw token ids
-    \\  qwen38-zig chat <MODEL_DIR> --prompt "..." [--system "..."] [--steps N]      one-shot chat (ChatML + greedy decode)
-    \\  qwen38-zig tokenize <MODEL_DIR> --prompt "..."      encode/decode text with the checkpoint's tokenizer.json
-    \\  qwen38-zig benchmark <MODEL_DIR> [--prompt-len N] [--steps N] [--expert-cap K]   runtime telemetry
-    \\  qwen38-zig stress <MODEL_DIR> [--context N] [--steps N] [--ram-limit G]          sweep RAM budgets
+    \\  colizig inspect <MODEL_DIR> [options]     print architecture + memory plan (no weights loaded)
+    \\  colizig selftest [MODEL_DIR]              bring-up checks: ops kernels, weights, GDN/MoE/PLE/QSA
+    \\  colizig forward <MODEL_DIR> --tokens <csv> [--steps N] [--expert-cap K]   end-to-end forward on raw token ids
+    \\  colizig chat <MODEL_DIR> --prompt "..." [--system "..."] [--steps N]      one-shot chat (ChatML + greedy decode)
+    \\  colizig tokenize <MODEL_DIR> --prompt "..."      encode/decode text with the checkpoint's tokenizer.json
+    \\  colizig benchmark <MODEL_DIR> [--prompt-len N] [--steps N] [--expert-cap K]   runtime telemetry
+    \\  colizig stress <MODEL_DIR> [--context N] [--steps N] [--ram-limit G]          sweep RAM budgets
     \\
     \\options:
     \\  --ram-limit <size>   resident memory budget (e.g. 8G, 16GiB); default: profile

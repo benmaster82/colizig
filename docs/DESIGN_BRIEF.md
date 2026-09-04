@@ -1,5 +1,9 @@
 # Project: qwen38-zig — Minimal Zig Inference Engine for Qwen3.8-Flash-Next on Non-Optimized Hardware
 
+> This is the original design brief, kept verbatim. The project has since been
+> renamed **colizig**; the docs' "§N" references point at the numbered sections
+> below.
+
 ## Role
 
 You are a senior systems engineer specializing in:
