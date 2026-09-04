@@ -10,6 +10,7 @@ const std = @import("std");
 const cfg_mod = @import("config");
 
 const out_dir = "test/fixtures/tiny";
+const out_dir_q3 = "test/fixtures/tiny-qwen3";
 
 const Dtype = enum {
     bf16,
@@ -89,7 +90,78 @@ const Builder = struct {
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
     const io = init.io;
+    try genQwen4Exp(gpa, io);
+    try genQwen3Moe(gpa, io);
+}
 
+fn genQwen3Moe(gpa: std.mem.Allocator, io: std.Io) !void {
+    var nul: [0]u8 = .{};
+    var sink: std.Io.Writer.Discarding = .init(&nul);
+    var c = try cfg_mod.parseSlice(gpa, cfg_mod.tiny_qwen3_config_json, &sink.writer);
+    defer c.deinit();
+
+    var b: Builder = .{ .gpa = gpa };
+    defer {
+        for (b.list.items) |t| {
+            gpa.free(t.name);
+            gpa.free(t.shape);
+            if (t.body) |bd| gpa.free(bd);
+        }
+        b.list.deinit(gpa);
+    }
+
+    const h: u64 = c.hidden;
+    const qd: u64 = @as(u64, c.q_heads) * c.head_dim;
+    const kvd: u64 = @as(u64, c.kv_heads) * c.head_dim;
+    const nbi = ceilDiv(c.inter, 128);
+    const nbh = ceilDiv(h, 128);
+    const nb_qd = ceilDiv(qd, 128);
+    const nb_kvd = ceilDiv(kvd, 128);
+
+    try b.add("model.embed_tokens.weight", .f32, &.{ c.vocab, h });
+    try b.add("lm_head.weight", .bf16, &.{ c.vocab, h });
+    try b.add("model.norm.weight", .f32, &.{h});
+
+    for (0..c.layers) |li| {
+        const L = try std.fmt.allocPrint(gpa, "model.layers.{d}", .{li});
+        defer gpa.free(L);
+        try b.addf("{s}.input_layernorm.weight", .{L}, .f32, &.{h});
+        try b.addf("{s}.post_attention_layernorm.weight", .{L}, .f32, &.{h});
+
+        // attention: q/k/v/o are block-FP8 with a weight_scale_inv
+        try b.addf("{s}.self_attn.q_proj.weight", .{L}, .f8_e4m3, &.{ qd, h });
+        try b.addf("{s}.self_attn.q_proj.weight_scale_inv", .{L}, .f32, &.{ nb_qd, nbh });
+        try b.addf("{s}.self_attn.k_proj.weight", .{L}, .f8_e4m3, &.{ kvd, h });
+        try b.addf("{s}.self_attn.k_proj.weight_scale_inv", .{L}, .f32, &.{ nb_kvd, nbh });
+        try b.addf("{s}.self_attn.v_proj.weight", .{L}, .f8_e4m3, &.{ kvd, h });
+        try b.addf("{s}.self_attn.v_proj.weight_scale_inv", .{L}, .f32, &.{ nb_kvd, nbh });
+        try b.addf("{s}.self_attn.o_proj.weight", .{L}, .f8_e4m3, &.{ h, qd });
+        try b.addf("{s}.self_attn.o_proj.weight_scale_inv", .{L}, .f32, &.{ nbh, nb_qd });
+        try b.addf("{s}.self_attn.q_norm.weight", .{L}, .f32, &.{c.head_dim});
+        try b.addf("{s}.self_attn.k_norm.weight", .{L}, .f32, &.{c.head_dim});
+
+        // MoE: F32 router, block-FP8 experts, no shared expert
+        try b.addf("{s}.mlp.gate.weight", .{L}, .f32, &.{ c.experts, h });
+        for (0..c.experts) |e| {
+            try b.addf("{s}.mlp.experts.{d}.gate_proj.weight", .{ L, e }, .f8_e4m3, &.{ c.inter, h });
+            try b.addf("{s}.mlp.experts.{d}.gate_proj.weight_scale_inv", .{ L, e }, .f32, &.{ nbi, nbh });
+            try b.addf("{s}.mlp.experts.{d}.up_proj.weight", .{ L, e }, .f8_e4m3, &.{ c.inter, h });
+            try b.addf("{s}.mlp.experts.{d}.up_proj.weight_scale_inv", .{ L, e }, .f32, &.{ nbi, nbh });
+            try b.addf("{s}.mlp.experts.{d}.down_proj.weight", .{ L, e }, .f8_e4m3, &.{ h, c.inter });
+            try b.addf("{s}.mlp.experts.{d}.down_proj.weight_scale_inv", .{ L, e }, .f32, &.{ nbh, nbi });
+        }
+    }
+
+    try writeFixture(gpa, io, b.list.items, out_dir_q3, cfg_mod.tiny_qwen3_config_json);
+    try writeTokenizer(gpa, io, out_dir_q3);
+
+    var log_buf: [256]u8 = undefined;
+    var log_fw: std.Io.File.Writer = .init(.stderr(), io, &log_buf);
+    try log_fw.interface.print("wrote {s}/ : {d} tensors\n", .{ out_dir_q3, b.list.items.len });
+    try log_fw.interface.flush();
+}
+
+fn genQwen4Exp(gpa: std.mem.Allocator, io: std.Io) !void {
     var nul: [0]u8 = .{};
     var sink: std.Io.Writer.Discarding = .init(&nul);
     var c = try cfg_mod.parseSlice(gpa, cfg_mod.tiny_config_json, &sink.writer);
@@ -207,8 +279,8 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    try writeFixture(gpa, io, b.list.items);
-    try writeTokenizer(gpa, io);
+    try writeFixture(gpa, io, b.list.items, out_dir, cfg_mod.tiny_config_json);
+    try writeTokenizer(gpa, io, out_dir);
 
     var log_buf: [512]u8 = undefined;
     var log_fw: std.Io.File.Writer = .init(.stderr(), io, &log_buf);
@@ -220,7 +292,7 @@ pub fn main(init: std.process.Init) !void {
 /// the space (Ġ) and newline (Ċ) byte-unicode chars, a handful of merges that
 /// build up "hello"/"world", and the ChatML special tokens.  Every id stays
 /// below the tiny config's vocab_size.
-fn writeTokenizer(gpa: std.mem.Allocator, io: std.Io) !void {
+fn writeTokenizer(gpa: std.mem.Allocator, io: std.Io, dir_path: []const u8) !void {
     var j: std.ArrayList(u8) = .empty;
     defer j.deinit(gpa);
 
@@ -271,7 +343,7 @@ fn writeTokenizer(gpa: std.mem.Allocator, io: std.Io) !void {
         \\}
     );
 
-    var dir = try std.Io.Dir.cwd().createDirPathOpen(io, out_dir, .{});
+    var dir = try std.Io.Dir.cwd().createDirPathOpen(io, dir_path, .{});
     defer dir.close(io);
     try dir.writeFile(io, .{ .sub_path = "tokenizer.json", .data = j.items });
 }
@@ -343,7 +415,7 @@ fn fillBody(dst: []u8, t: Tensor) void {
     }
 }
 
-fn writeFixture(gpa: std.mem.Allocator, io: std.Io, tensors: []const Tensor) !void {
+fn writeFixture(gpa: std.mem.Allocator, io: std.Io, tensors: []const Tensor, dir_path: []const u8, config_json: []const u8) !void {
     // safetensors header JSON + zero body
     var header: std.ArrayList(u8) = .empty;
     defer header.deinit(gpa);
@@ -398,9 +470,11 @@ fn writeFixture(gpa: std.mem.Allocator, io: std.Io, tensors: []const Tensor) !vo
         off += nb;
     }
 
-    var dir = try std.Io.Dir.cwd().createDirPathOpen(io, out_dir, .{});
+    const cfg_nl = try std.fmt.allocPrint(gpa, "{s}\n", .{config_json});
+    defer gpa.free(cfg_nl);
+    var dir = try std.Io.Dir.cwd().createDirPathOpen(io, dir_path, .{});
     defer dir.close(io);
-    try dir.writeFile(io, .{ .sub_path = "config.json", .data = cfg_mod.tiny_config_json ++ "\n" });
+    try dir.writeFile(io, .{ .sub_path = "config.json", .data = cfg_nl });
     try dir.writeFile(io, .{ .sub_path = "model.safetensors", .data = st_bytes });
     try dir.writeFile(io, .{ .sub_path = "model.safetensors.index.json", .data = index.items });
 }

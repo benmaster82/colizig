@@ -574,7 +574,35 @@ fn add(a: u32, b: u32, comptime name: []const u8, err: *std.Io.Writer) !u32 {
     };
 }
 
+/// Tiny `qwen3_moe` config for `test/fixtures/tiny-qwen3/`.
+pub const tiny_qwen3_config_json =
+    \\{
+    \\  "model_type": "qwen3_moe",
+    \\  "hidden_size": 32, "num_hidden_layers": 4, "vocab_size": 64,
+    \\  "max_position_embeddings": 4096, "eos_token_id": 2,
+    \\  "hidden_act": "silu", "attention_bias": false, "tie_word_embeddings": false,
+    \\  "rms_norm_eps": 0.000001, "rope_theta": 1000000,
+    \\  "num_attention_heads": 2, "num_key_value_heads": 1, "head_dim": 16,
+    \\  "num_experts": 4, "num_experts_per_tok": 2,
+    \\  "moe_intermediate_size": 16, "norm_topk_prob": true,
+    \\  "decoder_sparse_step": 1, "mlp_only_layers": []
+    \\}
+;
+
 // ---- tests -----------------------------------------------------------------
+
+test "tiny qwen3_moe config parses" {
+    var nul: [0]u8 = .{};
+    var sink: std.Io.Writer.Discarding = .init(&nul);
+    var c = try parseSlice(std.testing.allocator, tiny_qwen3_config_json, &sink.writer);
+    defer c.deinit();
+    try std.testing.expectEqual(Arch.qwen3_moe, c.arch);
+    try std.testing.expectEqual(@as(u32, 16), c.head_dim);
+    try std.testing.expectEqual(@as(u32, 16), c.rotary_dim); // full rope
+    try std.testing.expectEqual(@as(u32, 0), c.shared_inter); // no shared expert
+    try std.testing.expectEqual(@as(u32, 4), c.layers);
+    for (c.is_attn) |a| try std.testing.expect(a);
+}
 
 /// A minimal but structurally faithful tiny config, mirroring colibri's
 /// `test_qwen38_config.c`.  Kept in sync with `tools/gen_tiny_fixture.zig`.

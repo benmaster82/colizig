@@ -10,6 +10,8 @@
 const std = @import("std");
 const Cfg = @import("../model/config.zig").Cfg;
 const Weights = @import("../model/weights.zig").Weights;
+const manifest_mod = @import("../model/manifest.zig");
+const weights_mod = @import("../model/weights.zig");
 const attn = @import("attn.zig");
 const moe = @import("../qwen38/moe.zig");
 const rms = @import("../ops/rmsnorm.zig").rms;
@@ -269,4 +271,66 @@ pub fn generateGreedy(
         try forward(model, state, sc, &one, logits, opts);
     }
     return written;
+}
+
+// ---- tests ----------------------------------------------------------------
+
+const testing = std.testing;
+
+test "qwen3_moe forward on the tiny fixture: finite, in-vocab, prefill == incremental decode" {
+    const gpa = testing.allocator;
+    const io = std.testing.io;
+    var nul: [0]u8 = .{};
+    var sink: std.Io.Writer.Discarding = .init(&nul);
+
+    var m = manifest_mod.open(gpa, io, "test/fixtures/tiny-qwen3", &sink.writer) catch |e| switch (e) {
+        error.OpenFailed, error.NoCheckpoint => return error.SkipZigTest,
+        else => return e,
+    };
+    defer m.deinit();
+    var w = try weights_mod.Weights.open(gpa, io, "test/fixtures/tiny-qwen3", &m, &sink.writer);
+    defer w.deinit();
+
+    var model = try Model.load(gpa, &w);
+    defer model.deinit();
+
+    const V = model.cfg.vocab;
+    const T = 6;
+    const ctx = 16;
+    var prng = std.Random.DefaultPrng.init(0x3E2E);
+    const rnd = prng.random();
+    const ids = try gpa.alloc(i64, T);
+    defer gpa.free(ids);
+    for (ids) |*v| v.* = rnd.intRangeAtMost(i64, 0, @as(i64, @intCast(V - 1)));
+
+    var sc = try Scratch.init(gpa, &model, T, ctx);
+    defer sc.deinit();
+    const l1 = try gpa.alloc(f32, V);
+    defer gpa.free(l1);
+    const l2 = try gpa.alloc(f32, V);
+    defer gpa.free(l2);
+
+    var st1 = try State.init(gpa, &model, ctx, model.cfg.experts, io);
+    defer st1.deinit();
+    try forward(&model, &st1, &sc, ids, l1, .{});
+    for (l1) |v| try testing.expect(std.math.isFinite(v));
+
+    var st2 = try State.init(gpa, &model, ctx, model.cfg.experts, io);
+    defer st2.deinit();
+    for (ids) |id| {
+        var one = [_]i64{id};
+        try forward(&model, &st2, &sc, &one, l2, .{});
+    }
+    for (l1, l2) |a, b| try testing.expectApproxEqAbs(a, b, 2e-3);
+
+    var st3 = try State.init(gpa, &model, ctx, model.cfg.experts, io);
+    defer st3.deinit();
+    const out = try gpa.alloc(i64, 4);
+    defer gpa.free(out);
+    const n = try generateGreedy(&model, &st3, &sc, ids[0..3], out, .{});
+    try testing.expect(n >= 1 and n <= 4);
+    for (out[0..n]) |o| try testing.expect(o >= 0 and o < V);
+
+    var one_bad = [_]i64{@intCast(V)};
+    try testing.expectError(error.TokenOutOfVocab, forward(&model, &st1, &sc, &one_bad, l1, .{}));
 }
