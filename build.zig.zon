@@ -12,6 +12,7 @@
         "src",
         "tools",
         "docs",
+        "assets",
         "README.md",
         "LICENSE",
     },
