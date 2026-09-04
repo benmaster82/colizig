@@ -421,9 +421,15 @@ Real shapes (checked against the shard headers): `embed_tokens` F32, router
 (`mlp.gate`) F32, q/k/v/o_proj F8_E4M3 block-scale (`4096×2048` etc.), q/k_norm
 F32 `[head_dim]`, experts F8_E4M3.
 
-Still open: a tiny qwen3_moe fixture + NumPy oracle (regression coverage — the
-current validation is "the output is obviously right"); logit cross-check vs HF
-`transformers`; `budget.plan` is bypassed (`forward3` sizes its own KV bank).
+**Regression** (`test/fixtures/tiny-qwen3/`): the forward test checks finite /
+in-vocab / out-of-vocab-rejected / greedy-terminates / **prefill == incremental
+decode**; and `tools/reference/qwen3moe_ref.py` (independent NumPy port, shares
+the E4M3 decode / block-FP8 matmul / RoPE with `qwen38_ref.py`) drives an oracle
+test — Zig logits match NumPy to < 2e-2, argmax exact, on 3 token sets.
+
+Still open: logit cross-check vs HF `transformers` (needs the 61 GB BF16 or
+`transformers` FP8 loading); `budget.plan` is bypassed (`forward3` sizes its own
+KV bank).
 
 ## Phase 12 — `serve` (HTTP API)
 

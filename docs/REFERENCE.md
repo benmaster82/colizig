@@ -35,7 +35,12 @@ zig build test                                 # the oracle test now runs
 
 `test/fixtures/tiny/oracle.json` is git-ignored (regenerated). The Zig test
 `model.zig : "matches the NumPy reference oracle"` **skips** when it is absent,
-so `zig build test` never requires Python. It compares `forward` logits to the
+There are now two reference forwards — `qwen38_ref.py` (Qwen4-Exp) and
+`qwen3moe_ref.py` (Qwen3-MoE, sharing the E4M3 / block-FP8 / RoPE helpers) — and
+`build_oracle.py` writes one `oracle.json` per fixture (`test/fixtures/tiny/` and
+`test/fixtures/tiny-qwen3/`).
+
+So `zig build test` never requires Python. It compares `forward` logits to the
 oracle (max abs < 2e-2, both f32) and requires the argmax to match exactly.
 
 ## Keeping it in sync

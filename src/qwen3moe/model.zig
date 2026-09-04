@@ -334,3 +334,60 @@ test "qwen3_moe forward on the tiny fixture: finite, in-vocab, prefill == increm
     var one_bad = [_]i64{@intCast(V)};
     try testing.expectError(error.TokenOutOfVocab, forward(&model, &st1, &sc, &one_bad, l1, .{}));
 }
+
+test "qwen3_moe matches the NumPy reference oracle (run tools/reference/build_oracle.py)" {
+    const gpa = testing.allocator;
+    const io = std.testing.io;
+    var nul: [0]u8 = .{};
+    var sink: std.Io.Writer.Discarding = .init(&nul);
+
+    const oracle_bytes = std.Io.Dir.cwd().readFileAlloc(io, "test/fixtures/tiny-qwen3/oracle.json", gpa, .limited(4 << 20)) catch
+        return error.SkipZigTest;
+    defer gpa.free(oracle_bytes);
+
+    var m = manifest_mod.open(gpa, io, "test/fixtures/tiny-qwen3", &sink.writer) catch |e| switch (e) {
+        error.OpenFailed, error.NoCheckpoint => return error.SkipZigTest,
+        else => return e,
+    };
+    defer m.deinit();
+    var w = try weights_mod.Weights.open(gpa, io, "test/fixtures/tiny-qwen3", &m, &sink.writer);
+    defer w.deinit();
+    var model = try Model.load(gpa, &w);
+    defer model.deinit();
+
+    var parsed = try std.json.parseFromSlice(std.json.Value, gpa, oracle_bytes, .{});
+    defer parsed.deinit();
+    const cases = parsed.value.object.get("cases").?.array;
+
+    const V = m.cfg.vocab;
+    const logits = try gpa.alloc(f32, V);
+    defer gpa.free(logits);
+    var ids_buf: [64]i64 = undefined;
+
+    for (cases.items) |case| {
+        const co = case.object;
+        const jids = co.get("token_ids").?.array;
+        const jlog = co.get("final_logits").?.array;
+        for (jids.items, 0..) |v, i| ids_buf[i] = v.integer;
+        const ids = ids_buf[0..jids.items.len];
+
+        const ctx = ids.len + 4;
+        var st = try State.init(gpa, &model, ctx, m.cfg.experts, io);
+        defer st.deinit();
+        var sc = try Scratch.init(gpa, &model, ids.len, ctx);
+        defer sc.deinit();
+        try forward(&model, &st, &sc, ids, logits, .{});
+
+        var max_abs: f32 = 0;
+        for (jlog.items, logits) |ref_v, got| {
+            const ref: f32 = switch (ref_v) {
+                .float => |x| @floatCast(x),
+                .integer => |x| @floatFromInt(x),
+                else => unreachable,
+            };
+            max_abs = @max(max_abs, @abs(ref - got));
+        }
+        try testing.expect(max_abs < 2e-2);
+        try testing.expectEqual(@as(i64, co.get("argmax").?.integer), @as(i64, @intCast(std.mem.indexOfMax(f32, logits))));
+    }
+}
