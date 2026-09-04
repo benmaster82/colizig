@@ -16,13 +16,15 @@ const stress_mod = @import("cli/stress.zig");
 const tokenize_mod = @import("cli/tokenize.zig");
 
 const usage =
-    \\colizig — experimental memory-streaming Zig inference engine for Qwen3.8-Flash-Next
+    \\colizig — experimental memory-streaming Zig inference engine for Qwen MoE models
+    \\           (Qwen3.8-Flash-Next / Qwen4-Exp, and Qwen3-MoE e.g. Qwen3-30B-A3B)
     \\
     \\usage:
     \\  colizig inspect <MODEL_DIR> [options]     print architecture + memory plan (no weights loaded)
     \\  colizig selftest [MODEL_DIR]              bring-up checks: ops kernels, weights, GDN/MoE/PLE/QSA
     \\  colizig forward <MODEL_DIR> --tokens <csv> [--steps N] [--expert-cap K]   end-to-end forward on raw token ids
-    \\  colizig chat <MODEL_DIR> --prompt "..." [--system "..."] [--steps N]      one-shot chat (ChatML + greedy decode)
+    \\  colizig chat <MODEL_DIR> [--prompt "..."] [--system "..."] [--steps N]    interactive REPL, or one-shot with --prompt
+    \\  colizig serve <MODEL_DIR> [--port 8080] [--host 127.0.0.1]   OpenAI-compatible HTTP API (/v1/chat/completions, SSE)
     \\  colizig tokenize <MODEL_DIR> --prompt "..."      encode/decode text with the checkpoint's tokenizer.json
     \\  colizig benchmark <MODEL_DIR> [--prompt-len N] [--steps N] [--expert-cap K]   runtime telemetry
     \\  colizig stress <MODEL_DIR> [--context N] [--steps N] [--ram-limit G]          sweep RAM budgets
@@ -178,6 +180,12 @@ fn run(
         return;
     }
 
+    if (std.mem.eql(u8, cmd, "serve")) {
+        const opts = try args_mod.parse(gpa, rest, err, true);
+        try @import("cli/serve.zig").run(gpa, io, out, err, opts);
+        return;
+    }
+
     try err.print("unknown command: {s}\n\n", .{cmd});
     try out.writeAll(usage);
     return error.UnknownCommand;
@@ -224,4 +232,5 @@ test {
     _ = @import("qwen38/chat_template.zig");
     _ = @import("qwen3moe/attn.zig");
     _ = @import("qwen3moe/model.zig");
+    _ = @import("cli/serve.zig");
 }

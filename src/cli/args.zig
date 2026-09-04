@@ -37,6 +37,9 @@ pub const Options = struct {
     /// `--cuda`: VRAM budget for the resident expert-weight cache (0 = auto: most
     /// of free VRAM). Parsed like `--ram-limit` (e.g. 2G, 3GiB).
     vram: u64 = 0,
+    /// `serve`: listen address.
+    port: u16 = 8080,
+    host: []const u8 = "127.0.0.1",
 };
 
 pub const Error = error{ MissingModelDir, BadFlag, MissingValue } || std.Io.Writer.Error;
@@ -66,6 +69,8 @@ pub fn parse(
     var b_cuda: bool = false;
     var b_cuda_verify: bool = false;
     var b_vram: u64 = 0;
+    var b_port: u16 = 8080;
+    var b_host: []const u8 = "127.0.0.1";
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -131,6 +136,14 @@ pub fn parse(
                 try err.print("--vram: not a valid size: \"{s}\"\n", .{v});
                 return error.BadFlag;
             };
+        } else if (std.mem.eql(u8, a, "--port")) {
+            const v = try value(args, &i, "--port", err);
+            b_port = std.fmt.parseUnsigned(u16, v, 10) catch {
+                try err.print("--port: not a valid port: \"{s}\"\n", .{v});
+                return error.BadFlag;
+            };
+        } else if (std.mem.eql(u8, a, "--host")) {
+            b_host = try value(args, &i, "--host", err);
         } else if (std.mem.eql(u8, a, "--mirror")) {
             b_mirror = try value(args, &i, "--mirror", err);
         } else if (std.mem.eql(u8, a, "--temperature") or std.mem.eql(u8, a, "--temp")) {
@@ -202,6 +215,8 @@ pub fn parse(
         .cuda = b_cuda,
         .cuda_verify = b_cuda_verify,
         .vram = b_vram,
+        .port = b_port,
+        .host = b_host,
     };
 }
 

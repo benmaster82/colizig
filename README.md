@@ -56,8 +56,9 @@ is **token-for-token identical to the independent C engine
 | **real-weight validation**: greedy decode token-for-token identical to colibri (independent C engine) on `Qwen/Qwen3.8-Flash-Next-FP8` | ✅ |
 | sampling (`--temperature` / `--top-k` / `--top-p` / `--seed`); learned expert priors (`.colizig_usage`); dual-SSD `--mirror` | ✅ |
 | **CUDA backend** (`--cuda` / `--vram`, `src/backend/`): block-FP8 matmul on the GPU via a runtime-loaded `colizig_cuda.dll` + a VRAM weight-cache; bit-identical, optional, CPU fallback (Phase 10a/10b). *Measured ~2× slower than CPU on a 4 GB T1000 — needs 8 GB+ VRAM to win.* | ✅ |
-| **Qwen3-MoE** (`model_type: qwen3_moe`, `src/qwen3moe/`): plain GQA + per-head QK-norm + full RoPE + 128-expert MoE (no PLE/GDN/shared expert); `forward` + `chat`. Runs `Qwen3-30B-A3B-FP8` end-to-end at ~3 tok/s CPU. | ✅ |
-| 10c async/batched CUDA · QSA per-head threading · MTP speculative decode · qwen3_moe fixture+oracle | ❌ remaining |
+| **Qwen3-MoE** (`model_type: qwen3_moe`, `src/qwen3moe/`): plain GQA + per-head QK-norm + full RoPE + 128-expert MoE (no PLE/GDN/shared expert). Runs `Qwen3-30B-A3B-FP8` end-to-end at ~3 tok/s CPU; tiny fixture + prefill==decode test | ✅ |
+| **`serve`** (`src/cli/serve.zig`): OpenAI-compatible HTTP — `/v1/chat/completions` (non-stream + SSE), `/v1/models`; both model families, model stays warm | ✅ |
+| 10c async/batched CUDA · QSA per-head threading · MTP speculative decode · NumPy oracle for qwen3_moe | ❌ remaining |
 
 `selftest` runs kernel + plumbing checks. Nothing is faked: an incomplete
 subsystem returns an error rather than a wrong number (brief §29).
@@ -105,6 +106,10 @@ zig build run -- chat <MODEL_DIR> --expert-cap 512 --cuda
 # Qwen3-MoE (Qwen3-30B-A3B-FP8) — same CLI, auto-detected from config.json:
 zig build run -- inspect C:\Models\Qwen3-30B-A3B-FP8
 zig build run -- chat    C:\Models\Qwen3-30B-A3B-FP8 --expert-cap 128
+
+# OpenAI-compatible HTTP endpoint (either model family):
+zig build run -- serve <MODEL_DIR> --port 8080 --expert-cap 128
+#   POST http://127.0.0.1:8080/v1/chat/completions  {messages,max_tokens,temperature,stream}
 
 # runtime telemetry / RAM-budget sweep:
 zig build run -- benchmark test/fixtures/tiny --prompt-len 8 --steps 20

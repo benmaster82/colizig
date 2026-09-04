@@ -39,6 +39,7 @@ ends with: build ✅ · test ✅ · benchmark (once kernels exist) · document.
 | **10b** | bounded VRAM LRU cache of resident expert weights (`--vram`) | **done — no speedup on 4 GB** |
 | 10c | pinned staging + async streams + batched multi-expert kernels | *open, uncertain on a Max-Q* |
 | **11** | Qwen3-MoE support (Qwen3-30B-A3B) — plain GQA + QK-norm, no PLE/GDN/shared expert | **done — runs the real FP8 checkpoint end-to-end** |
+| **12** | `serve` — OpenAI-compatible HTTP API (`/v1/chat/completions`, SSE), both model families | **done** |
 
 ## Phase 1 deliverables
 
@@ -423,6 +424,25 @@ F32 `[head_dim]`, experts F8_E4M3.
 Still open: a tiny qwen3_moe fixture + NumPy oracle (regression coverage — the
 current validation is "the output is obviously right"); logit cross-check vs HF
 `transformers`; `budget.plan` is bypassed (`forward3` sizes its own KV bank).
+
+## Phase 12 — `serve` (HTTP API)
+
+```
+src/cli/serve.zig   one connection at a time (local use); the model stays warm;
+                    every request is stateless (full message history each time)
+src/cli/args.zig    + --port / --host
+src/main.zig        `serve` is a real command
+```
+
+- `POST /v1/chat/completions` — request `{messages, max_tokens, temperature,
+  top_p, stream}`; non-stream returns the OpenAI `chat.completion` shape,
+  `stream:true` returns Server-Sent Events (`data: {choices:[{delta:{content}}]}`
+  … `data: [DONE]`).
+- `GET /v1/models`, `GET /` (health).
+- `serveGeneric(comptime Mdl)` is instantiated for both `qwen38/model.zig` and
+  `qwen3moe/model.zig` — same `Model` / `State` / `Scratch` / `forward` shape.
+- `std.http.Server` over a `std.Io.net` TCP stream. Verified end-to-end against
+  `Qwen3-30B-A3B-FP8` (non-stream JSON + SSE token deltas, correct escaping).
 
 ## Real-checkpoint bring-up + perf pass (2026-09)
 
