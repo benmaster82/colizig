@@ -1,12 +1,15 @@
 //! `chat` — ColiZig: ChatML chat over the real tokenizer + forward.
 //!
 //!   * `--prompt "..."`  → one-shot: render, prefill, stream the reply, print.
-//!   * no `--prompt`     → interactive multi-turn REPL, colibri-style: a header
-//!     with the ColiZig logo, then per turn a greyed "thinking" box and the
-//!     answer in Qwen's colour, each token streamed as it is produced and a
-//!     `tok/s` line per reply.  The KV / DeltaNet / PLE state and the warm
-//!     expert cache carry across turns; `/reset` clears the conversation,
-//!     `/think` toggles reasoning, `/exit` quits.
+//!   * no `--prompt`     → interactive multi-turn REPL: a header with the ColiZig
+//!     logo, then per turn a greyed "thinking" box and the answer in Qwen's
+//!     colour, each token streamed as it is produced and a `tok/s` line per
+//!     reply.  KV state + the warm expert cache carry across turns; `/reset`
+//!     clears the conversation, `/think` toggles reasoning, `/exit` quits.
+//!
+//! One code path for **both** model families — `runGeneric` / `Session` are
+//! generic over the model module (`qwen38/model.zig` or `qwen3moe/model.zig`),
+//! dispatched on `cfg.arch`.
 
 const std = @import("std");
 const args = @import("args.zig");
@@ -14,7 +17,8 @@ const units = @import("../util/units.zig");
 const manifest_mod = @import("../model/manifest.zig");
 const weights_mod = @import("../model/weights.zig");
 const budget = @import("../runtime/budget.zig");
-const model_mod = @import("../qwen38/model.zig");
+const q4 = @import("../qwen38/model.zig");
+const q3 = @import("../qwen3moe/model.zig");
 const tok_mod = @import("../qwen38/tokenizer.zig");
 const template = @import("../qwen38/chat_template.zig");
 const parallel = @import("../runtime/parallel.zig");
@@ -159,62 +163,68 @@ const Styler = struct {
 };
 
 /// Everything the decode loop needs, assembled once and reused every turn.
-const Session = struct {
-    gpa: std.mem.Allocator,
-    io: std.Io,
-    out: *std.Io.Writer,
-    tk: *tok_mod.Tokenizer,
-    model: *model_mod.Model,
-    state: *model_mod.State,
-    sc: *model_mod.Scratch,
-    fopts: model_mod.Opts,
-    sampler: *sampler_mod.Sampler,
-    logits: []f32,
-    vocab: u32,
-    context: u32,
-    prefill_chunk: usize,
-    eos_id: i64,
-    im_end_id: i64,
-    max_new: usize,
+/// Generic over the model module (`qwen38/model.zig` or `qwen3moe/model.zig`) —
+/// both expose the same `Model` / `State` / `Scratch` / `forward` / `Opts` shape,
+/// so the whole ColiZig REPL is one code path for both model families.
+fn Session(comptime Mdl: type) type {
+    return struct {
+        const Self = @This();
+        gpa: std.mem.Allocator,
+        io: std.Io,
+        out: *std.Io.Writer,
+        tk: *tok_mod.Tokenizer,
+        model: *Mdl.Model,
+        state: *Mdl.State,
+        sc: *Mdl.Scratch,
+        fopts: Mdl.Opts,
+        sampler: *sampler_mod.Sampler,
+        logits: []f32,
+        vocab: u32,
+        context: u32,
+        prefill_chunk: usize,
+        eos_id: i64,
+        im_end_id: i64,
+        max_new: usize,
 
-    fn prefill(s: *Session, ids: []const i64) !void {
-        var off: usize = 0;
-        while (off < ids.len) {
-            const n = @min(s.prefill_chunk, ids.len - off);
-            try model_mod.forward(s.model, s.state, s.sc, ids[off .. off + n], s.logits, s.fopts);
-            off += n;
+        fn prefill(s: *Self, ids: []const i64) !void {
+            var off: usize = 0;
+            while (off < ids.len) {
+                const n = @min(s.prefill_chunk, ids.len - off);
+                try Mdl.forward(s.model, s.state, s.sc, ids[off .. off + n], s.logits, s.fopts);
+                off += n;
+            }
         }
-    }
 
-    /// Decode up to `max_new` tokens (greedy or sampled), streaming through `styler`.
-    fn generate(s: *Session, gen: *std.ArrayList(u32), styler: *Styler) !struct { n: usize, secs: f64 } {
-        gen.clearRetainingCapacity();
-        var one: [1]i64 = undefined;
-        const t0 = Timestamp.now(s.io, .awake);
-        var n: usize = 0;
-        while (n < s.max_new) : (n += 1) {
-            const best = s.sampler.pick(s.logits);
-            const bi: i64 = @intCast(best);
-            if (bi == s.im_end_id or bi == s.eos_id) break;
-            if (best >= s.vocab) break;
-            try gen.append(s.gpa, @intCast(best));
+        /// Decode up to `max_new` tokens (greedy or sampled), streaming through `styler`.
+        fn generate(s: *Self, gen: *std.ArrayList(u32), styler: *Styler) !struct { n: usize, secs: f64 } {
+            gen.clearRetainingCapacity();
+            var one: [1]i64 = undefined;
+            const t0 = Timestamp.now(s.io, .awake);
+            var n: usize = 0;
+            while (n < s.max_new) : (n += 1) {
+                const best = s.sampler.pick(s.logits);
+                const bi: i64 = @intCast(best);
+                if (bi == s.im_end_id or bi == s.eos_id) break;
+                if (best >= s.vocab) break;
+                try gen.append(s.gpa, @intCast(best));
 
-            const full = try s.tk.decode(s.gpa, gen.items, false);
-            defer s.gpa.free(full);
-            try styler.feed(full, false);
+                const full = try s.tk.decode(s.gpa, gen.items, false);
+                defer s.gpa.free(full);
+                try styler.feed(full, false);
 
-            one[0] = bi;
-            if (s.state.pos + 1 > s.context) break;
-            try model_mod.forward(s.model, s.state, s.sc, one[0..1], s.logits, s.fopts);
+                one[0] = bi;
+                if (s.state.pos + 1 > s.context) break;
+                try Mdl.forward(s.model, s.state, s.sc, one[0..1], s.logits, s.fopts);
+            }
+            const final = try s.tk.decode(s.gpa, gen.items, false);
+            defer s.gpa.free(final);
+            try styler.feed(final, true);
+            try styler.finish();
+            const dt = t0.durationTo(Timestamp.now(s.io, .awake)).nanoseconds;
+            return .{ .n = n, .secs = @as(f64, @floatFromInt(dt)) / 1e9 };
         }
-        const final = try s.tk.decode(s.gpa, gen.items, false);
-        defer s.gpa.free(final);
-        try styler.feed(final, true);
-        try styler.finish();
-        const dt = t0.durationTo(Timestamp.now(s.io, .awake)).nanoseconds;
-        return .{ .n = n, .secs = @as(f64, @floatFromInt(dt)) / 1e9 };
-    }
-};
+    };
+}
 
 pub fn run(
     gpa: std.mem.Allocator,
@@ -223,13 +233,6 @@ pub fn run(
     err: *std.Io.Writer,
     opts: args.Options,
 ) !void {
-    {
-        var m0 = try manifest_mod.open(gpa, io, opts.model_dir, err);
-        const arch = m0.cfg.arch;
-        m0.deinit();
-        if (arch == .qwen3_moe) return @import("chat3.zig").run(gpa, io, out, err, opts);
-    }
-
     parallel.enable(io, opts.threads);
     defer parallel.disable();
     if (opts.cuda) gpu.init(err);
@@ -244,65 +247,87 @@ pub fn run(
 
     var m = try manifest_mod.open(gpa, io, opts.model_dir, err);
     defer m.deinit();
-    var w = try weights_mod.Weights.open(gpa, io, opts.model_dir, &m, err);
+
+    return switch (m.cfg.arch) {
+        .qwen4_exp => runGeneric(q4, gpa, io, out, err, opts, dir, &m),
+        .qwen3_moe => runGeneric(q3, gpa, io, out, err, opts, dir, &m),
+    };
+}
+
+fn runGeneric(
+    comptime Mdl: type,
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    out: *std.Io.Writer,
+    err: *std.Io.Writer,
+    opts: args.Options,
+    dir: std.Io.Dir,
+    m: *manifest_mod.Manifest,
+) !void {
+    const is_q4 = Mdl == q4;
+
+    var w = try weights_mod.Weights.open(gpa, io, opts.model_dir, m, err);
     defer w.deinit();
-    if (opts.mirror.len != 0) {
+    if (is_q4 and opts.mirror.len != 0) {
         const nm = w.attachMirror(gpa, io, opts.mirror);
         try out.print("  " ++ C.dim ++ "mirror: {d}/{d} shards from {s}" ++ C.rst ++ "\n", .{ nm, w.shards.len, opts.mirror });
         try out.flush();
     }
     var tk = try tok_mod.Tokenizer.load(gpa, io, dir, err);
     defer tk.deinit();
-
     if (tk.vocabSize() > m.cfg.vocab) {
         try err.print("chat: tokenizer vocab {d} exceeds model vocab {d}\n", .{ tk.vocabSize(), m.cfg.vocab });
         return error.BadShape;
     }
 
     const interactive = opts.prompt.len == 0;
-    const max_new: usize = if (opts.steps != 0) opts.steps else if (interactive) 512 else 64;
+    const max_new: usize = if (opts.steps != 0) opts.steps else if (interactive) 512 else 128;
 
-    var bopts = opts.budget;
-    if (!interactive and bopts.context < opts.prompt.len / 2 + max_new) {
-        bopts.context = @intCast(opts.prompt.len / 2 + max_new + 64);
+    // Context + expert-cache size. Qwen4-Exp goes through the memory plan;
+    // Qwen3-MoE uses a plain KV-bank estimate (no PLE / DeltaNet state).
+    var context: usize = undefined;
+    var cap: usize = undefined;
+    var warm_stream: u64 = 0;
+    if (is_q4) {
+        var bopts = opts.budget;
+        if (!interactive and bopts.context < opts.prompt.len / 2 + max_new)
+            bopts.context = @intCast(opts.prompt.len / 2 + max_new + 64);
+        const plan = budget.plan(m.cfg, m.residentBytes(), bopts);
+        if (!plan.fits) {
+            try err.print("chat: {s}\n", .{plan.reason});
+            return error.ContextDoesNotFit;
+        }
+        context = plan.context;
+        cap = if (opts.expert_cap != 0) opts.expert_cap else plan.expert_cap;
+        warm_stream = @min(@as(u64, cap) * plan.per_expert_bytes * m.cfg.layers, plan.ram_budget -| plan.fixed_resident);
+    } else {
+        context = if (opts.budget.context != 0) opts.budget.context else 8192;
+        cap = if (opts.expert_cap != 0) opts.expert_cap else @min(128, m.cfg.experts);
+        const per_expert = 3 * @as(u64, m.cfg.inter) * m.cfg.hidden + m.cfg.hidden * m.cfg.inter;
+        warm_stream = @as(u64, cap) * per_expert * m.cfg.layers;
     }
-    const plan = budget.plan(m.cfg, m.residentBytes(), bopts);
-    if (!plan.fits) {
-        try err.print("chat: {s}\n", .{plan.reason});
-        return error.ContextDoesNotFit;
-    }
-    const cap: usize = if (opts.expert_cap != 0) opts.expert_cap else plan.expert_cap;
-    const prefill_chunk: usize = @min(@as(usize, plan.context), 512);
+    const prefill_chunk: usize = @min(context, 512);
 
-    try out.print("  " ++ C.dim ++ "loading {d} layers, {f} resident ..." ++ C.rst ++ "\n", .{
-        m.cfg.layers, units.human(m.residentBytes()),
-    });
+    try out.print("  " ++ C.dim ++ "loading {d} layers, expert cap {d}/layer ..." ++ C.rst ++ "\n", .{ m.cfg.layers, cap });
     try out.flush();
 
-    var model = try model_mod.Model.load(gpa, &w);
+    var model = try Mdl.Model.load(gpa, &w);
     defer model.deinit();
-
-    var state = try model_mod.State.init(gpa, &model, plan.context, cap, io);
+    var state = try Mdl.State.init(gpa, &model, context, cap, io);
     defer state.deinit();
-    var sc = try model_mod.Scratch.init(gpa, &model, prefill_chunk, plan.context);
+    var sc = try Mdl.Scratch.init(gpa, &model, prefill_chunk, context);
     defer sc.deinit();
-    var sched = model_mod.Scheduler.init(gpa, 4096);
-    defer sched.deinit();
-    var predictor = try model_mod.Predictor.init(gpa, m.cfg.layers, m.cfg.topk);
-    defer predictor.deinit();
 
     // learned expert priors — load, warm the caches, save (merged) on exit
     const ul: u32 = @intCast(m.cfg.layers);
     const ue: u32 = @intCast(m.cfg.experts);
-    var usage: ?model_mod.ExpertUsage = if (opts.no_usage) null else (usage_mod.ExpertUsage.load(gpa, io, dir, ul, ue) orelse (model_mod.ExpertUsage.init(gpa, ul, ue) catch null));
+    var usage: ?Mdl.ExpertUsage = if (opts.no_usage) null else (usage_mod.ExpertUsage.load(gpa, io, dir, ul, ue) orelse (Mdl.ExpertUsage.init(gpa, ul, ue) catch null));
     defer if (usage) |*u| u.deinit();
     defer if (usage) |*u| u.save(io, dir);
     if (usage) |*u| {
-        const stream = @as(u64, cap) * plan.per_expert_bytes * m.cfg.layers;
-        const headroom = plan.ram_budget -| plan.fixed_resident;
         try out.print("  " ++ C.dim ++ "warming expert cache from learned priors ..." ++ C.rst ++ "\n", .{});
         try out.flush();
-        usage_mod.warmCaches(u, state.experts, &w, model.moe_dims, @min(stream, headroom));
+        usage_mod.warmCaches(u, state.experts, &w, model.moe_dims, warm_stream);
     }
 
     const logits = try gpa.alloc(f32, m.cfg.vocab);
@@ -318,7 +343,7 @@ pub fn run(
     if (!sampler.greedy())
         try out.print("  " ++ C.dim ++ "sampling: temp {d:.2} · top-k {d} · top-p {d:.2} · seed {d}" ++ C.rst ++ "\n", .{ opts.temperature, opts.top_k, opts.top_p, sampler.seed_used });
 
-    var sess: Session = .{
+    var sess: Session(Mdl) = .{
         .gpa = gpa,
         .io = io,
         .out = out,
@@ -326,25 +351,29 @@ pub fn run(
         .model = &model,
         .state = &state,
         .sc = &sc,
-        .fopts = .{ .io = io, .scheduler = &sched, .predictor = &predictor, .usage = if (usage) |*u| u else null },
+        .fopts = .{ .io = io, .usage = if (usage) |*u| u else null },
         .sampler = &sampler,
         .logits = logits,
         .vocab = m.cfg.vocab,
-        .context = plan.context,
+        .context = @intCast(context),
         .prefill_chunk = prefill_chunk,
         .eos_id = m.cfg.eos_id,
         .im_end_id = if (tk.specialId("<|im_end|>")) |x| @intCast(x) else -1,
         .max_new = max_new,
     };
 
-    if (!interactive) return oneShot(&sess, gpa, out, err, opts);
-    return repl(&sess, gpa, io, out, err, opts, &m, plan);
+    if (!interactive) return oneShot(Mdl, &sess, gpa, out, err, opts);
+    return repl(Mdl, &sess, gpa, io, out, err, opts, m);
 }
 
 fn banner(out: *std.Io.Writer, io: std.Io, m: *const manifest_mod.Manifest, ctx: u32) !void {
     const tty = std.Io.File.stdout().isTty(io) catch true;
     const ascii = [_][]const u8{ "  (\\   ", "   )·>  ", "  / \\   ", "        ", "        " };
     const disk = m.total_size orelse 0;
+    const name = switch (m.cfg.arch) {
+        .qwen4_exp => "Qwen3.8-Flash-Next · 176B",
+        .qwen3_moe => "Qwen3-MoE",
+    };
 
     try out.writeByte('\n');
     var pair: usize = 0;
@@ -356,10 +385,10 @@ fn banner(out: *std.Io.Writer, io: std.Io, m: *const manifest_mod.Manifest, ctx:
             0 => try out.writeAll(C.b ++ C.qwen ++ "Coli" ++ C.zig ++ "Zig" ++ C.rst ++ "  " ++ C.dim ++ "colizig" ++ C.rst),
             1 => try out.writeAll(C.dim ++ "tiny engine, immense model" ++ C.rst),
             2 => if (disk != 0)
-                try out.print(C.gray ++ "Qwen3.8-Flash-Next · 176B · {f} on disk" ++ C.rst, .{units.human(disk)})
+                try out.print(C.gray ++ "{s} · {f} on disk" ++ C.rst, .{ name, units.human(disk) })
             else
-                try out.writeAll(C.gray ++ "Qwen3.8-Flash-Next · 176B" ++ C.rst),
-            3 => try out.print(C.dgray ++ "chat · {d} layers · {f} resident · ctx {d}" ++ C.rst, .{ m.cfg.layers, units.human(m.residentBytes()), ctx }),
+                try out.print(C.gray ++ "{s}" ++ C.rst, .{name}),
+            3 => try out.print(C.dgray ++ "chat · {d} layers · {d} experts top-{d} · ctx {d}" ++ C.rst, .{ m.cfg.layers, m.cfg.experts, m.cfg.topk, ctx }),
             else => {},
         }
         try out.writeByte('\n');
@@ -380,7 +409,8 @@ fn footer(out: *std.Io.Writer, ntok: usize, prompt_tok: usize, pf_ms: f64, secs:
 }
 
 fn oneShot(
-    sess: *Session,
+    comptime Mdl: type,
+    sess: *Session(Mdl),
     gpa: std.mem.Allocator,
     out: *std.Io.Writer,
     err: *std.Io.Writer,
@@ -393,7 +423,7 @@ fn oneShot(
     const prompt_text = try template.render(gpa, msgs.items, true, true);
     defer gpa.free(prompt_text);
 
-    const ids = try encodeToI64(sess, gpa, prompt_text, err);
+    const ids = try encodeToI64(Mdl, sess, gpa, prompt_text, err);
     defer gpa.free(ids);
 
     try out.print("\n  " ++ C.b ++ C.zig ++ "▸ you" ++ C.rst ++ "\n  " ++ C.zig ++ "{s}" ++ C.rst ++ "\n", .{opts.prompt});
@@ -411,14 +441,14 @@ fn oneShot(
 }
 
 fn repl(
-    sess: *Session,
+    comptime Mdl: type,
+    sess: *Session(Mdl),
     gpa: std.mem.Allocator,
     io: std.Io,
     out: *std.Io.Writer,
     err: *std.Io.Writer,
     opts: args.Options,
     m: *const manifest_mod.Manifest,
-    plan: budget.Plan,
 ) !void {
     var in_buf: [8192]u8 = undefined;
     var stdin_r = std.Io.File.stdin().readerStreaming(io, &in_buf);
@@ -429,7 +459,7 @@ fn repl(
     var frag: std.ArrayList(u8) = .empty;
     defer frag.deinit(gpa);
 
-    try banner(out, io, m, plan.context);
+    try banner(out, io, m, sess.context);
 
     var turn: usize = 0;
     var thinking = true;
@@ -451,7 +481,6 @@ fn repl(
         if (std.mem.eql(u8, line, "/exit") or std.mem.eql(u8, line, "/quit")) break;
         if (std.mem.eql(u8, line, "/reset")) {
             sess.state.reset();
-            if (sess.fopts.predictor) |p| p.reset();
             turn = 0;
             try out.writeAll("  " ++ C.dim ++ "(conversation cleared)" ++ C.rst ++ "\n");
             continue;
@@ -473,7 +502,7 @@ fn repl(
         }
         try frag.print(gpa, "<|im_start|>user\n{s}<|im_end|>\n{s}", .{ line, template.assistantOpen(thinking) });
 
-        const ids = encodeToI64(sess, gpa, frag.items, err) catch |e| switch (e) {
+        const ids = encodeToI64(Mdl, sess, gpa, frag.items, err) catch |e| switch (e) {
             error.TokenOutOfVocab => {
                 try out.writeAll("  " ++ C.dim ++ "(input produced an out-of-vocab token, turn skipped)" ++ C.rst ++ "\n");
                 continue;
@@ -506,7 +535,7 @@ fn repl(
 }
 
 /// Encode `text` and convert to `[]i64`, rejecting any id outside the model vocab.
-fn encodeToI64(sess: *Session, gpa: std.mem.Allocator, text: []const u8, err: *std.Io.Writer) ![]i64 {
+fn encodeToI64(comptime Mdl: type, sess: *Session(Mdl), gpa: std.mem.Allocator, text: []const u8, err: *std.Io.Writer) ![]i64 {
     const ids = try sess.tk.encode(gpa, text);
     defer gpa.free(ids);
     const out = try gpa.alloc(i64, ids.len);
