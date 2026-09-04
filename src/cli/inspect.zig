@@ -21,6 +21,33 @@ pub fn run(
     defer m.deinit();
     const c = m.cfg;
 
+    if (c.arch == .qwen3_moe) {
+        try out.print(
+            \\== Qwen3-MoE ({s}.*) ==
+            \\  source dir:      {s}
+            \\  hidden size:     {d}
+            \\  layers:          {d}  (all GQA attention with QK-norm + full RoPE)
+            \\  attention:       {d} query / {d} KV heads, head_dim {d}, theta {d:.0}
+            \\  MoE:             {d} experts, top-{d} routed (no shared expert), expert width {d}
+            \\  vocab:           {d}
+            \\  native context:  {d} tokens
+            \\
+        , .{
+            m.text_prefix,     opts.model_dir, c.hidden, c.layers,
+            c.q_heads,         c.kv_heads,     c.head_dim, c.theta,
+            c.experts,         c.topk,         c.inter,
+            c.vocab,           c.max_positions,
+        });
+        try out.print("-- tensors --\n  total indexed: {d}  ({d} resident, {d} streamable MoE, {d} unknown)\n\n", .{
+            m.tensors.len,
+            m.countByResidency(.resident),
+            m.countByResidency(.streamable),
+            m.countByCategory(.unknown),
+        });
+        try out.print("-- storage --\n  checkpoint on disk: {f}\n", .{units.human(m.total_size orelse 0)});
+        return;
+    }
+
     try out.print(
         \\== Qwen3.8-Flash-Next (Qwen4-Exp) ==
         \\  source dir:      {s}

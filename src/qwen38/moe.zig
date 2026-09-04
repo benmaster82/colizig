@@ -28,6 +28,11 @@ pub const Dims = struct {
     shared_inter: usize,
     norm_topk: bool,
 
+    /// `shared_inter == 0` ⇒ no shared expert (Qwen3-MoE).
+    pub fn hasShared(self: Dims) bool {
+        return self.shared_inter != 0;
+    }
+
     pub fn of(cfg: Cfg) Dims {
         return .{
             .hidden = cfg.hidden,
@@ -291,13 +296,14 @@ fn loadExpert(gpa: std.mem.Allocator, w: *const Weights, layer: u32, d: Dims, id
 
 pub const Layer = struct {
     router: NativeMatrix, // [experts, hidden]
-    sh_gate_proj: NativeMatrix, // [shared_inter, hidden]
-    sh_up_proj: NativeMatrix, // [shared_inter, hidden]
-    sh_down_proj: NativeMatrix, // [hidden, shared_inter]
-    sh_gate: []f32, // [hidden]
+    // Shared expert — present only when `d.hasShared()` (absent in Qwen3-MoE).
+    sh_gate_proj: ?NativeMatrix = null, // [shared_inter, hidden]
+    sh_up_proj: ?NativeMatrix = null, // [shared_inter, hidden]
+    sh_down_proj: ?NativeMatrix = null, // [hidden, shared_inter]
+    sh_gate: []f32 = &.{}, // [hidden]
     allocator: std.mem.Allocator,
 
-    pub fn load(gpa: std.mem.Allocator, w: *const Weights, layer: u32) !Layer {
+    pub fn load(gpa: std.mem.Allocator, w: *const Weights, layer: u32, d: Dims) !Layer {
         var nb: [128]u8 = undefined;
         var sb: [96]u8 = undefined;
         const S = struct {
@@ -306,26 +312,27 @@ pub const Layer = struct {
             }
         }.s;
 
-        var self: Layer = undefined;
-        self.allocator = gpa;
+        var self: Layer = .{ .router = undefined, .allocator = gpa };
         self.router = try w.matrixBySuffix(S(&sb, layer, "gate.weight"), &nb);
         errdefer self.router.deinit();
-        self.sh_gate_proj = try w.matrixBySuffix(S(&sb, layer, "shared_expert.gate_proj.weight"), &nb);
-        errdefer self.sh_gate_proj.deinit();
-        self.sh_up_proj = try w.matrixBySuffix(S(&sb, layer, "shared_expert.up_proj.weight"), &nb);
-        errdefer self.sh_up_proj.deinit();
-        self.sh_down_proj = try w.matrixBySuffix(S(&sb, layer, "shared_expert.down_proj.weight"), &nb);
-        errdefer self.sh_down_proj.deinit();
-        self.sh_gate = try w.vectorBySuffix(S(&sb, layer, "shared_expert_gate.weight"), &nb);
+        if (d.hasShared()) {
+            self.sh_gate_proj = try w.matrixBySuffix(S(&sb, layer, "shared_expert.gate_proj.weight"), &nb);
+            errdefer self.sh_gate_proj.?.deinit();
+            self.sh_up_proj = try w.matrixBySuffix(S(&sb, layer, "shared_expert.up_proj.weight"), &nb);
+            errdefer self.sh_up_proj.?.deinit();
+            self.sh_down_proj = try w.matrixBySuffix(S(&sb, layer, "shared_expert.down_proj.weight"), &nb);
+            errdefer self.sh_down_proj.?.deinit();
+            self.sh_gate = try w.vectorBySuffix(S(&sb, layer, "shared_expert_gate.weight"), &nb);
+        }
         return self;
     }
 
     pub fn deinit(self: *Layer) void {
         self.router.deinit();
-        self.sh_gate_proj.deinit();
-        self.sh_up_proj.deinit();
-        self.sh_down_proj.deinit();
-        self.allocator.free(self.sh_gate);
+        if (self.sh_gate_proj) |*m| m.deinit();
+        if (self.sh_up_proj) |*m| m.deinit();
+        if (self.sh_down_proj) |*m| m.deinit();
+        if (self.sh_gate.len != 0) self.allocator.free(self.sh_gate);
         self.* = undefined;
     }
 };
@@ -456,13 +463,15 @@ fn route(layer: *const Layer, d: Dims, xs: []const f32, sc: *Scratch) void {
 }
 
 /// Shared expert (SwiGLU) with its sigmoid gate → `ys[dd] += gate·shared(xs)`.
+/// No-op when the arch has no shared expert (Qwen3-MoE).
 fn addSharedExpert(layer: *const Layer, d: Dims, xs: []const f32, ys: []f32, sc: *Scratch) void {
+    if (!d.hasShared()) return;
     const H = d.hidden;
     const SI = d.shared_inter;
-    layer.sh_gate_proj.matmul(sc.sg[0..SI], xs, 1);
-    layer.sh_up_proj.matmul(sc.su[0..SI], xs, 1);
+    layer.sh_gate_proj.?.matmul(sc.sg[0..SI], xs, 1);
+    layer.sh_up_proj.?.matmul(sc.su[0..SI], xs, 1);
     for (0..SI) |j| sc.sh[j] = act.silu(sc.sg[j]) * sc.su[j];
-    layer.sh_down_proj.matmul(sc.shared[0..H], sc.sh[0..SI], 1);
+    layer.sh_down_proj.?.matmul(sc.shared[0..H], sc.sh[0..SI], 1);
     var sgate: f32 = 0;
     for (0..H) |dd| sgate += xs[dd] * layer.sh_gate[dd];
     sgate = act.sigmoid(sgate);
@@ -677,7 +686,7 @@ test "MoE forward is finite and deterministic on the tiny fixture" {
 
     const d = Dims.of(m.cfg);
     const layer_idx: u32 = 0;
-    var layer = try Layer.load(gpa, &w, layer_idx);
+    var layer = try Layer.load(gpa, &w, layer_idx, d);
     defer layer.deinit();
 
     const T = 4;

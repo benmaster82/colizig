@@ -95,7 +95,7 @@ pub const Model = struct {
             const li: u32 = @intCast(i);
             self.attn_gr[i] = try residual.Gated.load(gpa, weights, li, .attn);
             self.mlp_gr[i] = try residual.Gated.load(gpa, weights, li, .mlp);
-            self.moe_layers[i] = try moe.Layer.load(gpa, weights, li);
+            self.moe_layers[i] = try moe.Layer.load(gpa, weights, li, moe.Dims.of(cfg));
             if (cfg.is_attn[i]) {
                 self.qsa_layers[i] = try qsa.Layer.load(gpa, weights, li);
             } else {

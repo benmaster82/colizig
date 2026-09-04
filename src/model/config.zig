@@ -30,8 +30,19 @@ pub const Vision = struct {
     loaded: bool = false,
 };
 
+pub const Arch = enum {
+    /// Qwen3.8-Flash-Next / Qwen4-Exp: GDN + QSA + PLE + 512-expert MoE + shared.
+    qwen4_exp,
+    /// Qwen3-MoE (e.g. Qwen3-30B-A3B): plain GQA attention with QK-norm, no
+    /// shared expert, no PLE / GDN / hyper-connections. Fields specific to
+    /// `qwen4_exp` are left zero.
+    qwen3_moe,
+};
+
 pub const Cfg = struct {
-    // identity
+    arch: Arch = .qwen4_exp,
+
+    // identity (both arches)
     hidden: u32,
     layers: u32,
     vocab: u32,
@@ -39,55 +50,54 @@ pub const Cfg = struct {
     eos_id: i64,
     eps: f32,
     theta: f32,
-    partial_rotary: f32,
+    partial_rotary: f32 = 1.0,
     rotary_dim: u32,
 
-    // gated residual ("hyper connections", 4 branches)
-    hc_count: u32,
-    hc_rank: u32,
-    hc_width: u32,
-
-    // sparse (QSA / "full") attention
+    // attention (both arches)
     q_heads: u32,
     kv_heads: u32,
     head_dim: u32,
 
-    // lightweight indexer inside QSA layers
-    idx_qheads: u32,
-    idx_kheads: u32,
-    idx_dim: u32,
-    idx_budget: u32,
-    idx_ratio: u32,
-
-    // MoE
+    // MoE (both arches; `shared_inter == 0` ⇒ no shared expert)
     experts: u32,
     topk: u32,
     inter: u32,
-    shared_inter: u32,
-    norm_topk: bool,
+    shared_inter: u32 = 0,
+    norm_topk: bool = true,
 
+    // --- qwen4_exp only (zero for qwen3_moe) ---
+    // gated residual ("hyper connections", 4 branches)
+    hc_count: u32 = 0,
+    hc_rank: u32 = 0,
+    hc_width: u32 = 0,
+    // lightweight indexer inside QSA layers
+    idx_qheads: u32 = 0,
+    idx_kheads: u32 = 0,
+    idx_dim: u32 = 0,
+    idx_budget: u32 = 0,
+    idx_ratio: u32 = 0,
     // Gated DeltaNet (linear attention)
-    dn_kheads: u32,
-    dn_vheads: u32,
-    dn_kdim: u32,
-    dn_vdim: u32,
-    dn_convk: u32,
-    dn_conv_dim: u32,
-
+    dn_kheads: u32 = 0,
+    dn_vheads: u32 = 0,
+    dn_kdim: u32 = 0,
+    dn_vdim: u32 = 0,
+    dn_convk: u32 = 0,
+    dn_conv_dim: u32 = 0,
     // PLE / hashed n-gram
-    ple_layer: u32, // 0-based
-    ple_dim: u32,
-    ple_convk: u32,
-    ngram_size: u32,
-    heads_per_ngram: u32,
-    ngram_heads: u32,
-    ngram_head_dim: u32,
-    ngram_parts: u32,
+    ple_layer: u32 = 0, // 0-based
+    ple_dim: u32 = 0,
+    ple_convk: u32 = 0,
+    ngram_size: u32 = 0,
+    heads_per_ngram: u32 = 0,
+    ngram_heads: u32 = 0,
+    ngram_head_dim: u32 = 0,
+    ngram_parts: u32 = 0,
 
-    // per-layer kind: true = QSA / full attention, false = Gated DeltaNet
+    /// per-layer kind: true = attention (QSA / full), false = Gated DeltaNet.
+    /// All-true for qwen3_moe.
     is_attn: []bool,
 
-    vision: ?Vision,
+    vision: ?Vision = null,
 
     allocator: std.mem.Allocator,
 
@@ -153,9 +163,10 @@ pub fn parseSlice(gpa: std.mem.Allocator, bytes: []const u8, err: *std.Io.Writer
     };
 
     const model_type = getStr(tc, "model_type") orelse "";
+    if (std.mem.eql(u8, model_type, "qwen3_moe")) return parseQwen3Moe(gpa, tc, err);
     if (!std.mem.eql(u8, model_type, "qwen4_exp_text")) {
         try err.print(
-            "unsupported text model_type: \"{s}\" (expected \"qwen4_exp_text\" — this is the Qwen3.8-Flash-Next / Qwen4-Exp text core)\n",
+            "unsupported text model_type: \"{s}\" (expected \"qwen4_exp_text\" or \"qwen3_moe\")\n",
             .{model_type},
         );
         return error.UnsupportedModel;
@@ -177,6 +188,7 @@ pub fn parseSlice(gpa: std.mem.Allocator, bytes: []const u8, err: *std.Io.Writer
     if (rope) |rp| try requireStr(rp, "rope_type", "default", err);
 
     var c: Cfg = undefined;
+    c.arch = .qwen4_exp;
     c.allocator = gpa;
     c.vision = null;
     c.is_attn = &.{};
@@ -337,7 +349,84 @@ pub fn parseSlice(gpa: std.mem.Allocator, bytes: []const u8, err: *std.Io.Writer
     return c;
 }
 
+/// Qwen3-MoE (`model_type: "qwen3_moe"`, e.g. Qwen3-30B-A3B). A plain
+/// pre-norm transformer: GQA attention with per-head QK RMSNorm and full RoPE,
+/// then a top-k MoE with no shared expert. None of the Qwen4-Exp machinery
+/// (GDN / QSA indexer / PLE / hyper-connections) is present; those `Cfg` fields
+/// stay zero and `is_attn` is all-true.
+fn parseQwen3Moe(gpa: std.mem.Allocator, tc: std.json.ObjectMap, err: *std.Io.Writer) !Cfg {
+    try requireStr(tc, "hidden_act", "silu", err);
+    try requireBool(tc, "attention_bias", false, err);
+    try requireBool(tc, "tie_word_embeddings", false, err);
+    if (tc.get("rope_scaling")) |v| if (v != .null) {
+        try err.writeAll("config.json: rope_scaling / YaRN is not supported (use the base checkpoint)\n");
+        return error.UnsupportedModel;
+    };
+    if (tc.get("mlp_only_layers")) |v| if (v == .array and v.array.items.len != 0) {
+        try err.writeAll("config.json: mlp_only_layers (dense layers among the MoE) not supported\n");
+        return error.UnsupportedModel;
+    };
+
+    const layers = try reqInt(u32, tc, "num_hidden_layers", err);
+    const is_attn = try gpa.alloc(bool, layers);
+    errdefer gpa.free(is_attn);
+    @memset(is_attn, true);
+
+    const head_dim = try reqInt(u32, tc, "head_dim", err);
+    const c: Cfg = .{
+        .arch = .qwen3_moe,
+        .allocator = gpa,
+        .is_attn = is_attn,
+        .hidden = try reqInt(u32, tc, "hidden_size", err),
+        .layers = layers,
+        .vocab = try reqInt(u32, tc, "vocab_size", err),
+        .max_positions = try reqInt(u32, tc, "max_position_embeddings", err),
+        .eos_id = try reqInt(i64, tc, "eos_token_id", err),
+        .eps = @floatCast(try optFloat(tc, "rms_norm_eps", 1e-6)),
+        .theta = @floatCast(try optFloat(tc, "rope_theta", 1000000)),
+        .q_heads = try reqInt(u32, tc, "num_attention_heads", err),
+        .kv_heads = try reqInt(u32, tc, "num_key_value_heads", err),
+        .head_dim = head_dim,
+        .rotary_dim = head_dim, // full RoPE
+        .experts = try reqInt(u32, tc, "num_experts", err),
+        .topk = try reqInt(u32, tc, "num_experts_per_tok", err),
+        .inter = try reqInt(u32, tc, "moe_intermediate_size", err),
+        .norm_topk = try optBool(tc, "norm_topk_prob", true),
+    };
+
+    try validate(c, err);
+    return c;
+}
+
 pub fn validate(c: Cfg, err: *std.Io.Writer) !void {
+    if (c.arch == .qwen3_moe) return validateQwen3Moe(c, err);
+    return validateQwen4Exp(c, err);
+}
+
+fn validateQwen3Moe(c: Cfg, err: *std.Io.Writer) !void {
+    const need = struct {
+        fn f(ok: bool, w: *std.Io.Writer, comptime msg: []const u8) !void {
+            if (!ok) {
+                try w.writeAll("config.json: " ++ msg ++ " — refusing\n");
+                return error.InvalidConfig;
+            }
+        }
+    }.f;
+    try need(c.hidden > 0 and c.hidden <= 65536, err, "hidden_size out of range");
+    try need(c.layers > 0 and c.layers <= 512 and c.is_attn.len == c.layers, err, "num_hidden_layers out of range");
+    try need(c.vocab > 0, err, "vocab_size out of range");
+    try need(c.max_positions > 0, err, "max_position_embeddings out of range");
+    try need(std.math.isFinite(c.eps) and c.eps > 0, err, "rms_norm_eps invalid");
+    try need(std.math.isFinite(c.theta) and c.theta > 0, err, "rope_theta invalid");
+    try need(c.eos_id >= 0 and c.eos_id < c.vocab, err, "eos_token_id outside vocabulary");
+    try need(c.q_heads > 0 and c.kv_heads > 0 and c.q_heads % c.kv_heads == 0, err, "attention head counts invalid");
+    try need(c.head_dim > 0 and c.head_dim % 2 == 0, err, "head_dim invalid");
+    try need(c.experts > 0 and c.experts <= 4096, err, "num_experts out of range");
+    try need(c.topk > 0 and c.topk <= c.experts, err, "num_experts_per_tok invalid");
+    try need(c.inter > 0, err, "moe_intermediate_size invalid");
+}
+
+fn validateQwen4Exp(c: Cfg, err: *std.Io.Writer) !void {
     const need = struct {
         fn f(ok: bool, w: *std.Io.Writer, comptime msg: []const u8) !void {
             if (!ok) {

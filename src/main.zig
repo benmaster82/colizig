@@ -222,4 +222,6 @@ test {
     _ = @import("qwen38/model.zig");
     _ = @import("qwen38/tokenizer.zig");
     _ = @import("qwen38/chat_template.zig");
+    _ = @import("qwen3moe/attn.zig");
+    _ = @import("qwen3moe/model.zig");
 }

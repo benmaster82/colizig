@@ -393,7 +393,7 @@ fn moeChecks(
     w: *const weights_mod.Weights,
 ) !void {
     const d = moe.Dims.of(m.cfg);
-    var layer = moe.Layer.load(gpa, w, 0) catch {
+    var layer = moe.Layer.load(gpa, w, 0, d) catch {
         try c.check("load MoE layer weights", false);
         return;
     };

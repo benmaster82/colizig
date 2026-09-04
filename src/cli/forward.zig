@@ -50,6 +50,14 @@ pub fn run(
         return error.BadFlag;
     }
 
+    {
+        var m0 = try manifest_mod.open(gpa, io, opts.model_dir, err);
+        const arch = m0.cfg.arch;
+        m0.deinit();
+        if (arch == .qwen3_moe)
+            return @import("forward3.zig").run(gpa, io, out, err, opts, prompt.items);
+    }
+
     var m = try manifest_mod.open(gpa, io, opts.model_dir, err);
     defer m.deinit();
     var w = try weights_mod.Weights.open(gpa, io, opts.model_dir, &m, err);

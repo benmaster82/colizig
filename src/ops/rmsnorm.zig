@@ -25,6 +25,24 @@ pub fn rms0InPlace(x: []f32, w: []const f32, eps: f32) void {
     rms0(x, x, w, eps);
 }
 
+/// Plain RMSNorm: `out_i = x_i * rsqrt(mean(x^2) + eps) * w_i` — the scale is
+/// `w`, not `1 + w`. Used by Qwen2/Qwen3 (`Qwen3RMSNorm`), including the
+/// per-head QK-norm. `w.len` may be shorter than `x.len` (per-head norm applied
+/// to each `w.len`-wide slice) — pass matching lengths.
+pub fn rms(out: []f32, x: []const f32, w: []const f32, eps: f32) void {
+    std.debug.assert(out.len == x.len and x.len == w.len);
+    const n = x.len;
+    var ss: f64 = 0;
+    for (x) |v| ss += @as(f64, v) * v;
+    const mean: f32 = @floatCast(ss / @as(f64, @floatFromInt(n)));
+    const r: f32 = 1.0 / @sqrt(mean + eps);
+    for (out, x, w) |*o, v, wi| o.* = v * r * wi;
+}
+
+pub fn rmsInPlace(x: []f32, w: []const f32, eps: f32) void {
+    rms(x, x, w, eps);
+}
+
 /// out_i = x_i * rsqrt(mean(x^2) + eps) * w_i * g(gate_i)
 /// where g is sigmoid when `sigmoid_gate`, else silu.
 pub fn rmsGated(

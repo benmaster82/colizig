@@ -38,6 +38,7 @@ ends with: build ✅ · test ✅ · benchmark (once kernels exist) · document.
 | **10a** | CUDA backend plumbing + the block-FP8 matmul on the GPU (`--cuda`), bit-identical | **done** |
 | **10b** | bounded VRAM LRU cache of resident expert weights (`--vram`) | **done — no speedup on 4 GB** |
 | 10c | pinned staging + async streams + batched multi-expert kernels | *open, uncertain on a Max-Q* |
+| **11** | Qwen3-MoE support (Qwen3-30B-A3B) — plain GQA + QK-norm, no PLE/GDN/shared expert | **scaffold done; unvalidated vs real weights (download pending)** |
 
 ## Phase 1 deliverables
 
@@ -381,6 +382,32 @@ async streams, batched kernels) or a dense-weights-in-VRAM pivot are the
 remaining options; on a 35 W Max-Q neither is clearly worth it. The backend is
 kept — correct, opt-in, and useful on better hardware. Figures in
 `docs/BENCHMARK.md` / `docs/GPU.md`.
+
+## Phase 11 — Qwen3-MoE (Qwen3-30B-A3B)
+
+A second model family behind `model_type: "qwen3_moe"`. Reuses the FP8 kernels,
+expert cache + streaming, CUDA backend, tokenizer, sampler and the MoE forward;
+adds a plain pre-norm transformer with GQA attention (per-head QK RMSNorm + full
+RoPE, no indexer / block selection / output gate) and **no** PLE, GDN,
+hyper-connections or shared expert.
+
+```
+src/model/config.zig      + Arch enum; parseQwen3Moe / validateQwen3Moe
+src/model/manifest.zig     (classifier already covered the qwen3_moe names)
+src/ops/rmsnorm.zig        + rms() — plain (scale = w, not 1+w)
+src/qwen38/moe.zig         Layer.load + addSharedExpert now optional (shared_inter == 0)
+src/qwen3moe/attn.zig      GQA causal attention: q/k/v/o FP8, QK-norm, RoPE, KV cache
+src/qwen3moe/model.zig     Model / State / Scratch / forward / generateGreedy
+src/cli/forward3.zig       `forward` for qwen3_moe (dispatched from forward.zig)
+src/cli/inspect.zig        arch-aware report
+```
+
+Config parses and the classifier categorises all 37,491 tensors of
+`Qwen/Qwen3-30B-A3B-FP8` with zero unknowns; `inspect` reports it correctly.
+The forward compiles and the existing 67 tests pass, **but it is not yet run
+against the real weights** (30 GB download in progress) and there is no tiny
+qwen3_moe fixture / oracle. Next: fixture + forward smoke test, then a real
+`forward` run and a colibri / HF cross-check.
 
 ## Real-checkpoint bring-up + perf pass (2026-09)
 
