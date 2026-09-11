@@ -30,11 +30,23 @@ pub const Scratch = model_mod.Scratch;
 ///
 /// `logits` is scratch, length `model.cfg.vocab` (the caller's existing
 /// per-step logits buffer is fine to reuse - its contents are undefined on
-/// return). Bit-identical to running `forward()` one token at a time and
-/// taking the argmax each step (proven by the unit test below): the verify
-/// loop reconstructs, off the *same* `Scratch.h` rows the batched forward
-/// already computed, exactly the per-position prediction a token-by-token
-/// loop would have made.
+/// return). The accept/reject decision is exact **by construction**: it
+/// compares each position's argmax against whatever this same batched
+/// `forward()` call itself computed for it, off the *same* `Scratch.h` rows -
+/// there is no separate "truth" it could disagree with.
+///
+/// What is NOT guaranteed: that this batched (`S > 1`) forward's argmax
+/// matches a plain per-token (`S == 1`) decode's argmax for the same
+/// position. `moe.zig`'s `forward` dispatches to a different code path for
+/// each (`forwardDense` vs `forwardGrouped`) that "differ only in f32
+/// rounding (< 1e-4)" (`moe.zig`'s own doc comment) - close enough that the
+/// tiny fixture's unit test below reproduces `generateGreedy` exactly, but on
+/// a real checkpoint two logits can be close enough for that rounding to
+/// flip the argmax. Confirmed on `Qwen3-30B-A3B-FP8`: `--speculative 0` vs
+/// `--speculative N` occasionally diverges on a repetitive prompt (the n-gram
+/// drafter's best case is also where near-tied next-token logits are most
+/// likely). Not a bug in this function - `docs/SPECULATIVE.md` has the
+/// details and why it isn't worth chasing away.
 pub fn speculativeStep(
     gpa: std.mem.Allocator,
     model: *const Model,

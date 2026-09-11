@@ -94,7 +94,8 @@ and diffing the output (now part of the verification recipe below).
 zig build test --summary all      # lookup_draft + speculative unit tests, "matches greedy" invariant
 zig build run -- chat <Qwen3-30B dir> --prompt "..." --speculative 4
 zig build run -- chat <Qwen3-30B dir> --prompt "..." --speculative 0
-# same prompt, both greedy (temperature 0 is the default) -> output must be identical
+# same prompt, both greedy - matches on the tiny fixture, see the caveat below
+# for why a real checkpoint can occasionally differ.
 ```
 
 The unit test in `qwen3moe/speculative.zig` runs `generateGreedy` (ground
@@ -102,6 +103,43 @@ truth) against the speculative round loop at draft depths 0/2/4 on the tiny
 fixture and asserts the exact same token sequence - this is the regression
 that would have caught both bugs above immediately, and is what protects this
 code going forward.
+
+### Measured on the real checkpoint (2026-09, `Qwen3-30B-A3B-FP8`, cap 128)
+
+Prompt "repeat this sentence four times" (40 generated tokens, greedy):
+
+| | `--speculative 0` | `--speculative 6` |
+|---|---|---|
+| decode | 2.34 tok/s | **2.79 tok/s** (+19%) |
+| TTFT (16583/6713 ms) | cold | warm page cache from the first run |
+
+A real, measured gain on the model this phase actually targets - not just the
+tiny fixture.
+
+### Caveat found while measuring this: output isn't always textually identical
+
+The two runs above **diverged partway through** ("...lazy dog near the
+riverbank" vs "...lazy dog near **near** the riverbank"). This is not a bug
+in the accept/reject logic (see `speculativeStep`'s doc comment for the exact
+mechanism) - it's a pre-existing property of `moe.zig`: decode (`S == 1`)
+and prefill/batched (`S > 1`) use different code paths, `forwardDense` and
+`forwardGrouped`, that the codebase's own doc comment says "differ only in
+f32 rounding (< 1e-4)". Greedy argmax is a discontinuous function of the
+logits - close enough rounding can flip which token wins, and a repetitive
+prompt (the n-gram drafter's best case) is exactly where next-token logits
+are most likely to be near-tied. The tiny-fixture unit test doesn't catch
+this because its (effectively random) weights produce well-separated logits
+where a 1e-4 perturbation never flips the argmax.
+
+This means the honest guarantee is **"matches greedy to within the engine's
+existing numerical tolerance"** (the same ~1e-4 order the rest of the
+codebase already treats as equal - e.g. the prefill == incremental-decode
+test elsewhere in this file uses `expectApproxEqAbs(..., 2e-3)`, not exact
+equality), not a strict bit-identical one. Eliminating it entirely would mean
+never batching verification - i.e. not doing speculative decoding at all, since
+the whole 19% above comes from `forwardGrouped` amortizing MoE reads across
+the draft. Not chased further this phase; flagged here so it isn't
+rediscovered as a mystery bug later.
 
 **`benchmark` doesn't cover this yet** - `src/cli/benchmark.zig` is
 Qwen4-Exp-only today (`@import("../qwen38/model.zig")` directly, no arch

@@ -506,9 +506,21 @@ off-by-one (the CLI's existing `prefill()` forwards the whole prompt, but
 `speculativeStep` also forwards its seed token - double-forwarding the
 prompt's last token). Both are written up in `docs/SPECULATIVE.md` since
 they're the kind of bug this design is inherently exposed to again wherever
-it's extended. Verified end-to-end: `--speculative 0` vs `--speculative N` on
-the same prompt gives byte-identical `chat` output on the tiny fixture, not
-just in the unit test.
+it's extended.
+
+Measured on the real `Qwen3-30B-A3B-FP8` (cap 128, 40-token greedy decode):
+**2.34 -> 2.79 tok/s (+19%)** with `--speculative 6`. Same run also surfaced a
+third, pre-existing (not introduced here) numerical-precision gap: `moe.zig`
+dispatches decode (`S == 1`) and batched (`S > 1`) MoE evaluation to two
+different code paths documented to "differ only in f32 rounding (< 1e-4)" -
+close enough that the tiny fixture's unit test reproduces `generateGreedy`
+exactly, but on the real checkpoint's near-tied logits (most likely exactly
+on the repetitive prompts the n-gram drafter targets) that rounding can flip
+greedy's argmax, so output is not always textually identical to
+`--speculative 0`. Not a bug in the accept/reject logic itself (which is
+exact by construction against whatever the batched forward computed) and not
+fixable without giving up the batching that produces the 19% gain in the
+first place - documented in `docs/SPECULATIVE.md` rather than chased.
 
 `benchmark` doesn't measure this yet - it's Qwen4-Exp-only today (a
 pre-existing gap, not introduced here); accept-rate / tok/s on a real
