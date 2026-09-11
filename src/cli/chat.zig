@@ -25,6 +25,8 @@ const parallel = @import("../runtime/parallel.zig");
 const gpu = @import("../backend/gpu.zig");
 const usage_mod = @import("../runtime/expert_usage.zig");
 const sampler_mod = @import("../runtime/sampler.zig");
+const lookup_draft = @import("../runtime/lookup_draft.zig");
+const q3spec = @import("../qwen3moe/speculative.zig");
 
 const Timestamp = std.Io.Timestamp;
 
@@ -185,6 +187,8 @@ fn Session(comptime Mdl: type) type {
         eos_id: i64,
         im_end_id: i64,
         max_new: usize,
+        /// Qwen3-MoE + greedy only; see docs/SPECULATIVE.md. 0 = off.
+        speculative: u32 = 0,
 
         fn prefill(s: *Self, ids: []const i64) !void {
             var off: usize = 0;
@@ -195,27 +199,54 @@ fn Session(comptime Mdl: type) type {
             }
         }
 
-        /// Decode up to `max_new` tokens (greedy or sampled), streaming through `styler`.
-        fn generate(s: *Self, gen: *std.ArrayList(u32), styler: *Styler) !struct { n: usize, secs: f64 } {
+        /// Whether `generate` will take the speculative-decode path (Qwen3-MoE
+        /// + greedy only). The caller uses this to decide how much of the
+        /// prompt to hand to `prefill` - see `generate`'s doc comment.
+        fn wantsSpeculative(s: *const Self) bool {
+            if (comptime Mdl != q3) return false;
+            return s.speculative > 0 and s.sampler.greedy();
+        }
+
+        /// Decode up to `max_new` tokens (greedy or sampled), streaming through
+        /// `styler`. `ids` is the full prompt (it seeds the speculative
+        /// draft's n-gram history when enabled) - but when `wantsSpeculative()`
+        /// held true at prefill time, the caller must have prefilled only
+        /// `ids[0 .. ids.len - 1]`, leaving the last prompt token unforwarded:
+        /// the first speculative round forwards it itself (`speculativeStep`
+        /// always forwards its `last_confirmed` token, uniformly for every
+        /// round - see `generateSpeculativeQ3`). Re-prefilling the full
+        /// prompt AND letting the first round forward its last token again
+        /// would double-forward it and desync every following prediction.
+        fn generate(s: *Self, ids: []const i64, gen: *std.ArrayList(u32), styler: *Styler) !struct { n: usize, secs: f64 } {
             gen.clearRetainingCapacity();
-            var one: [1]i64 = undefined;
             const t0 = Timestamp.now(s.io, .awake);
             var n: usize = 0;
-            while (n < s.max_new) : (n += 1) {
-                const best = s.sampler.pick(s.logits);
-                const bi: i64 = @intCast(best);
-                if (bi == s.im_end_id or bi == s.eos_id) break;
-                if (best >= s.vocab) break;
-                try gen.append(s.gpa, @intCast(best));
 
-                const full = try s.tk.decode(s.gpa, gen.items, false);
-                defer s.gpa.free(full);
-                try styler.feed(full, false);
+            spec: {
+                if (comptime Mdl == q3) {
+                    if (s.speculative > 0 and s.sampler.greedy()) {
+                        n = try generateSpeculativeQ3(s, ids, gen, styler);
+                        break :spec;
+                    }
+                }
+                var one: [1]i64 = undefined;
+                while (n < s.max_new) : (n += 1) {
+                    const best = s.sampler.pick(s.logits);
+                    const bi: i64 = @intCast(best);
+                    if (bi == s.im_end_id or bi == s.eos_id) break;
+                    if (best >= s.vocab) break;
+                    try gen.append(s.gpa, @intCast(best));
 
-                one[0] = bi;
-                if (s.state.pos + 1 > s.context) break;
-                try Mdl.forward(s.model, s.state, s.sc, one[0..1], s.logits, s.fopts);
+                    const full = try s.tk.decode(s.gpa, gen.items, false);
+                    defer s.gpa.free(full);
+                    try styler.feed(full, false);
+
+                    one[0] = bi;
+                    if (s.state.pos + 1 > s.context) break;
+                    try Mdl.forward(s.model, s.state, s.sc, one[0..1], s.logits, s.fopts);
+                }
             }
+
             const final = try s.tk.decode(s.gpa, gen.items, false);
             defer s.gpa.free(final);
             try styler.feed(final, true);
@@ -224,6 +255,52 @@ fn Session(comptime Mdl: type) type {
             return .{ .n = n, .secs = @as(f64, @floatFromInt(dt)) / 1e9 };
         }
     };
+}
+
+/// Speculative-decode round loop for Qwen3-MoE (greedy-only). Each round:
+/// draft via n-gram lookup over the running history, verify + roll back in
+/// one `q3spec.speculativeStep` call, then stream every newly-confirmed
+/// token through `styler` exactly like the per-token loop above - only the
+/// number of tokens landing per model call differs. See docs/SPECULATIVE.md.
+fn generateSpeculativeQ3(
+    s: *Session(q3),
+    ids: []const i64,
+    gen: *std.ArrayList(u32),
+    styler: *Styler,
+) !usize {
+    var history: std.ArrayList(i64) = .empty;
+    defer history.deinit(s.gpa);
+    try history.appendSlice(s.gpa, ids);
+
+    const max_draft = 16; // sane ceiling regardless of --speculative
+    var draft_store: [max_draft]i64 = undefined;
+    var out_buf: [max_draft + 1]i64 = undefined;
+
+    var n: usize = 0;
+    var last: i64 = ids[ids.len - 1];
+    outer: while (n < s.max_new) {
+        // 0 when the context is nearly full - speculativeStep then degenerates
+        // to exactly one plain greedy step (see its doc comment).
+        const room: usize = (@as(usize, s.context) -| s.state.pos) -| 1;
+        const k: u32 = @intCast(@min(@min(@as(usize, s.speculative), max_draft), room));
+        const drafted = lookup_draft.draft(history.items, k) orelse @as([]const i64, &.{});
+        @memcpy(draft_store[0..drafted.len], drafted);
+        const draft = draft_store[0..drafted.len];
+
+        const got = try q3spec.speculativeStep(s.gpa, s.model, s.state, s.sc, last, draft, s.logits, out_buf[0..]);
+        for (out_buf[0..got]) |tok| {
+            if (tok == s.im_end_id or tok == s.eos_id or tok >= s.vocab) break :outer;
+            try gen.append(s.gpa, @intCast(tok));
+            try history.append(s.gpa, tok);
+            const full = try s.tk.decode(s.gpa, gen.items, false);
+            defer s.gpa.free(full);
+            try styler.feed(full, false);
+            last = tok;
+            n += 1;
+            if (n >= s.max_new) break :outer;
+        }
+    }
+    return n;
 }
 
 pub fn run(
@@ -360,7 +437,14 @@ fn runGeneric(
         .eos_id = m.cfg.eos_id,
         .im_end_id = if (tk.specialId("<|im_end|>")) |x| @intCast(x) else -1,
         .max_new = max_new,
+        .speculative = opts.speculative,
     };
+    if (opts.speculative > 0) {
+        if (!is_q4 and sampler.greedy())
+            try out.print("  " ++ C.dim ++ "speculative decoding: n-gram draft up to {d} tokens/round" ++ C.rst ++ "\n", .{opts.speculative})
+        else
+            try out.print("  " ++ C.dim ++ "speculative decoding: not available ({s}), plain decode" ++ C.rst ++ "\n", .{if (is_q4) "Qwen4-Exp not supported yet - see docs/SPECULATIVE.md" else "needs greedy sampling (temperature 0)"});
+    }
 
     if (!interactive) return oneShot(Mdl, &sess, gpa, out, err, opts);
     return repl(Mdl, &sess, gpa, io, out, err, opts, m);
@@ -430,13 +514,15 @@ fn oneShot(
     try out.flush();
 
     const pf0 = Timestamp.now(sess.io, .awake);
-    try sess.prefill(ids);
+    // when the first speculative round will forward the prompt's last token
+    // itself, prefill must stop one token short - see `generate`'s doc comment.
+    try sess.prefill(if (sess.wantsSpeculative()) ids[0 .. ids.len - 1] else ids);
     const pf_ms = @as(f64, @floatFromInt(pf0.durationTo(Timestamp.now(sess.io, .awake)).nanoseconds)) / 1e6;
 
     var gen: std.ArrayList(u32) = .empty;
     defer gen.deinit(gpa);
     var styler = Styler.init(out, true);
-    const r = try sess.generate(&gen, &styler);
+    const r = try sess.generate(ids, &gen, &styler);
     try footer(out, gen.items.len, ids.len, pf_ms, r.secs);
 }
 
@@ -517,7 +603,11 @@ fn repl(
         }
 
         const pf0 = Timestamp.now(io, .awake);
-        sess.prefill(ids) catch |e| switch (e) {
+        // when the first speculative round will forward the prompt's last
+        // token itself, prefill must stop one token short - see `generate`'s
+        // doc comment.
+        const prefill_ids = if (sess.wantsSpeculative()) ids[0 .. ids.len - 1] else ids;
+        sess.prefill(prefill_ids) catch |e| switch (e) {
             error.ContextExhausted, error.TooManyTokens => {
                 try out.writeAll("  " ++ C.dim ++ "(turn too long for the context - /reset)" ++ C.rst ++ "\n");
                 continue;
@@ -527,7 +617,7 @@ fn repl(
         const pf_ms = @as(f64, @floatFromInt(pf0.durationTo(Timestamp.now(io, .awake)).nanoseconds)) / 1e6;
 
         var styler = Styler.init(out, thinking);
-        const r = try sess.generate(&gen, &styler);
+        const r = try sess.generate(ids, &gen, &styler);
         try footer(out, gen.items.len, ids.len, pf_ms, r.secs);
         turn += 1;
     }

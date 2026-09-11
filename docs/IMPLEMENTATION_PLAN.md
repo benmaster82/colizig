@@ -40,6 +40,7 @@ ends with: build ✅ · test ✅ · benchmark (once kernels exist) · document.
 | 10c | pinned staging + async streams + batched multi-expert kernels | *open, uncertain on a Max-Q* |
 | **11** | Qwen3-MoE support (Qwen3-30B-A3B) - plain GQA + QK-norm, no PLE/GDN/shared expert | **done - runs the real FP8 checkpoint end-to-end** |
 | **12** | `serve` - OpenAI-compatible HTTP API (`/v1/chat/completions`, SSE), both model families | **done** |
+| **13** | `chat --speculative N` - n-gram prompt-lookup speculative decoding, greedy-only, Qwen3-MoE only | **done** |
 
 ## Phase 1 deliverables
 
@@ -479,6 +480,39 @@ fan-out already overlaps cold reads).
 
 Still open: logit validation vs the reference weights; QSA per-head threading;
 GPU backend. (Per-expert MoE decode threading: done - Phase 9b above.)
+
+## Phase 13 - speculative decoding (Qwen3-MoE)
+
+```
+src/runtime/lookup_draft.zig   n-gram ("prompt lookup") draft: no model, no training
+src/qwen3moe/speculative.zig   speculativeStep - batched verify + free KV-cache rollback
+src/cli/chat.zig               Session.wantsSpeculative / generateSpeculativeQ3, comptime-gated
+                                to Mdl == q3; oneShot/repl hold back the prompt's last token
+                                when speculative mode will run it itself
+src/cli/args.zig               + --speculative N (0 = off)
+```
+
+Greedy-only (`sampler.greedy()`), Qwen3-MoE only - Qwen4-Exp's GDN/PLE carry
+irreversible recurrent state that a rejected draft can't just truncate (needs
+snapshot + replay, designed but not built; see `docs/SPECULATIVE.md`).
+Qwen3-MoE's only sequence state is the KV cache, which rolls back for free.
+`forward()` is untouched; verification reads `Scratch.h` (already computed
+for every batch position, previously only the last row was used).
+
+Two real bugs surfaced by the "matches token-by-token greedy" unit test
+before this shipped: double-applying the final RMSNorm to the batch's last
+row (already normed in place by `forward()` itself), and a prefill/rollback
+off-by-one (the CLI's existing `prefill()` forwards the whole prompt, but
+`speculativeStep` also forwards its seed token - double-forwarding the
+prompt's last token). Both are written up in `docs/SPECULATIVE.md` since
+they're the kind of bug this design is inherently exposed to again wherever
+it's extended. Verified end-to-end: `--speculative 0` vs `--speculative N` on
+the same prompt gives byte-identical `chat` output on the tiny fixture, not
+just in the unit test.
+
+`benchmark` doesn't measure this yet - it's Qwen4-Exp-only today (a
+pre-existing gap, not introduced here); accept-rate / tok/s on a real
+checkpoint goes through `chat`'s own footer for now.
 
 ## Exit codes
 

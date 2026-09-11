@@ -40,6 +40,10 @@ pub const Options = struct {
     /// `serve`: listen address.
     port: u16 = 8080,
     host: []const u8 = "127.0.0.1",
+    /// `chat` / `benchmark`, Qwen3-MoE + greedy only: n-gram prompt-lookup
+    /// speculative decoding, draft up to this many tokens per round (0 = off).
+    /// See docs/SPECULATIVE.md.
+    speculative: u32 = 0,
 };
 
 pub const Error = error{ MissingModelDir, BadFlag, MissingValue } || std.Io.Writer.Error;
@@ -71,6 +75,7 @@ pub fn parse(
     var b_vram: u64 = 0;
     var b_port: u16 = 8080;
     var b_host: []const u8 = "127.0.0.1";
+    var b_spec: u32 = 0;
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -144,6 +149,12 @@ pub fn parse(
             };
         } else if (std.mem.eql(u8, a, "--host")) {
             b_host = try value(args, &i, "--host", err);
+        } else if (std.mem.eql(u8, a, "--speculative")) {
+            const v = try value(args, &i, "--speculative", err);
+            b_spec = std.fmt.parseUnsigned(u32, v, 10) catch {
+                try err.print("--speculative: not a non-negative integer: \"{s}\"\n", .{v});
+                return error.BadFlag;
+            };
         } else if (std.mem.eql(u8, a, "--mirror")) {
             b_mirror = try value(args, &i, "--mirror", err);
         } else if (std.mem.eql(u8, a, "--temperature") or std.mem.eql(u8, a, "--temp")) {
@@ -217,6 +228,7 @@ pub fn parse(
         .vram = b_vram,
         .port = b_port,
         .host = b_host,
+        .speculative = b_spec,
     };
 }
 

@@ -238,6 +238,7 @@ colizig stress    <MODEL_DIR> [--context N] [--steps N] [--ram-limit G]    sweep
 | `--no-usage` | chat/forward | don't read/write `.colizig_usage` learned expert priors |
 | `--mirror <dir>` | chat/forward/benchmark | a 2nd checkpoint copy on another drive; routed-expert reads split across both |
 | `--temperature <f>` / `--top-k <n>` / `--top-p <f>` / `--seed <n>` | chat/forward | sampling; `--temperature 0` (default) = deterministic greedy |
+| `--speculative <n>` | chat | n-gram prompt-lookup speculative decoding, draft up to `n` tokens/round; Qwen3-MoE + greedy only (see [`docs/SPECULATIVE.md`](docs/SPECULATIVE.md)) |
 | `--cuda` [`--vram <size>`] [`--cuda-verify`] | chat/forward/benchmark | run the block-FP8 expert matmul on the GPU; `--vram` caps the resident weight cache; `--cuda-verify` cross-checks every GPU matmul against the CPU |
 | `--port <n>` / `--host <addr>` | serve | listen address (default `127.0.0.1:8080`) |
 | `-h`, `--help` | - | usage |
@@ -269,6 +270,7 @@ Full docs: [`ARCHITECTURE`](docs/ARCHITECTURE.md) ·
 [`PLE`](docs/PLE.md) · [`OPS`](docs/OPS.md) · [`THREADING`](docs/THREADING.md) ·
 [`IO_SCHEDULER`](docs/IO_SCHEDULER.md) · [`TOKENIZER`](docs/TOKENIZER.md) ·
 [`FORWARD`](docs/FORWARD.md) · [`GPU`](docs/GPU.md) · [`REFERENCE`](docs/REFERENCE.md) ·
+[`SPECULATIVE`](docs/SPECULATIVE.md) ·
 [`TENSOR_MAP`](docs/TENSOR_MAP.md) / [`QWEN38_TENSORS`](docs/QWEN38_TENSORS.md).
 
 ## Benchmarks
