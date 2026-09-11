@@ -141,6 +141,22 @@ the whole 19% above comes from `forwardGrouped` amortizing MoE reads across
 the draft. Not chased further this phase; flagged here so it isn't
 rediscovered as a mystery bug later.
 
+**Second occurrence, found in normal interactive use** (2026-09, same
+checkpoint, multi-turn `chat` REPL, `--speculative 6`, real conversation, not
+a synthetic stress prompt): asked for a PowerShell command against an Active
+Directory group; the reply read "...gli utenti di un **gruppopo** di Active
+Directory..." - an extra "po" syllable spliced into "gruppo". Reproduced the
+identical prompt with `--speculative 0` immediately after: clean output, no
+duplication, every time. This is not just consistent with the mechanism
+above - it's structurally guaranteed by it: plain decode (`--speculative 0`)
+only ever calls `forward()` with `S = 1`, so `moe.forward`'s dispatch
+(`moe.zig:423`) always takes the `forwardDense` branch - there is no `S > 1`
+call anywhere in that path for `forwardGrouped` to disagree with, so this
+class of artifact cannot arise there by construction, not merely "didn't show
+up in one sample". Two independent real-world sightings (a synthetic
+repetition stress test and an ordinary chat reply) of the same root cause is
+enough to call the mechanism confirmed, not just plausible.
+
 **`benchmark` doesn't cover this yet** - `src/cli/benchmark.zig` is
 Qwen4-Exp-only today (`@import("../qwen38/model.zig")` directly, no arch
 dispatch), a pre-existing gap unrelated to this phase. Measuring the real
